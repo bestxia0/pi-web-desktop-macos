@@ -13,12 +13,6 @@
 
 
 
-<img src="./docs/images/image-20261019134737277.png" alt="image-20261019134737277" style="zoom:50%;" />
-
-控制台界面：
-
-<img src="./docs/images/docks.png" alt="image-20261019134508745｜400" style="zoom:50%;" />
-
 
 
 ## 是什么 / 不是什么
@@ -58,8 +52,6 @@
 ![展开的菜单，所有条目可见](docs/images/menu-open.png)
 *完整菜单：打开、启动、停止、刷新、日志、开机自启、退出行为以及版本行。*
 
-![Pi Web Desktop 应用图标](docs/images/app-icon.png)
-*Finder / 启动台中的应用图标，构建时由 `Resources/AppIcon.jpg` 生成。*
 
 ![本地运行的 pi-web 控制台界面](docs/images/image-20261019134737277.png)
 *在浏览器应用模式下打开的 `pi-web` 控制台界面。*
