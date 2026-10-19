@@ -5,13 +5,68 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-The version shown in the menu is `<semver>-<builddate>`, e.g. `V0.6.0-20261019`.
+The version shown in the menu is `<semver>-<builddate>`, e.g. `V0.7.0-20261019`.
 The semantic part comes from the [`VERSION`](VERSION) file; the build date is
 stamped by `build.sh` at build time.
 
 ## [Unreleased]
 
 Nothing yet.
+
+## [0.7.0] - 2026-10-19
+
+Native multi-tab support in the single window; each tab is its own `WKWebView`
+loaded at its own pi-web URL, so different tabs can point at different sessions.
+Client-side only — upstream pi-web is untouched.
+
+### Added
+
+- **Native tab bar** (`TabBar.swift`) — a 34pt strip at the top of the single
+  window: one item per tab with a colour dot, a truncating title from the page,
+  and a borderless close button, plus a trailing `+` button. Selected tabs get
+  an accent-tinted rounded background. The strip scrolls horizontally and keeps
+  the selected item in view.
+- **Manual tab creation only** — the `+` button, ⌘T and the menu create tabs;
+  nothing auto-creates sessions and no state-changing API is called at startup.
+  A new tab loads the session list, scoped to the active tab's `cwd` when it has
+  one (`base + "/?cwd=<path>"`), otherwise `base + "/"`.
+- **Per-tab colours and context menu** — right-clicking a tab opens a `颜色`
+  submenu (无颜色, 红, 橙, 黄, 绿, 薄荷, 蓝, 靛蓝, 紫, 粉, 灰 — adaptive system
+  colours, checkmark on the current one) plus `关闭标签页` and `关闭其他标签页`.
+- **Real `NSApp.mainMenu`** (`MainMenu.swift`) — App / 编辑 / 标签页 / 浏览 menus.
+  ⌘T 新建标签页, ⌘W 关闭标签页 (closes the current tab, not the window), ⌘⇧] /
+  ⌘⇧[ next/previous, ⌘1…⌘9 select, ⌘[ / ⌘] back/forward, ⌘R reload, and a
+  standard Edit menu wired to nil-target first-responder selectors so web-view
+  text fields behave normally.
+- **Persistence** (`TabStore.swift`) — each tab's URL + colour and the selected
+  index are stored in `UserDefaults` (`PiWebTabs` / `PiWebTabsSelected`). On
+  restore every stored URL's scheme/host/port is rewritten to the *current*
+  pi-web base (the port can change), preserving path and query.
+- **`WKUIDelegate`** — pi-web's own `window.open('?session=<id>')` becomes a
+  native tab (internal hosts) or opens in the system browser (external hosts);
+  a minimal JavaScript alert panel keeps `alert()` visible.
+- **Status-menu tab items** — 新建 / 关闭 / 下一个 / 上一个 标签页 plus a `标签页`
+  submenu listing every tab (`<n> <title>`, checkmark on the selected one), and
+  the `menu build:` log line now reports `tabs` / `selectedTab`.
+- **Self-test** — deterministic checks for the colour palette (including
+  clamping), `rewriteBase`, `indexAfterClose`, `neighborIndex`, `newTabURL` and
+  the `TabStore` round-trip / corrupt-data handling.
+- **Pure helpers** (`TabSupport`) shared by `AppWindowController` and
+  `--self-test`.
+
+### Changed
+
+- **Single window, many web views** — `AppWindowController` now hosts a
+  container: the tab bar pinned on top and an interchangeable content area
+  below. Tabs are non-selected-hidden `WKWebView`s of `.default()` data store;
+  the window is still created once and closing it still only `orderOut`s it.
+- ⌘W now closes the current tab; when the last tab closes the window hides
+  (`orderOut`). The red close button and the right-Option hotkey still act on
+  the whole window.
+
+### Removed
+
+- Nothing.
 
 ## [0.6.0] - 2026-10-19
 
@@ -108,6 +163,7 @@ First public release: the menu bar launcher for the upstream `pi-web` web UI.
 - The build is ad-hoc signed, not notarised, so a downloaded copy needs
   Gatekeeper approval on first launch.
 
-[Unreleased]: https://github.com/bestxia0/pi-web-desktop-macos/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/bestxia0/pi-web-desktop-macos/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.7.0
 [0.6.0]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.6.0
 [0.5.0]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.5.0

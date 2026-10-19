@@ -15,6 +15,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         controller.onChange = { [weak self] in self?.render() }
+        appWindow.onTabsChanged = { [weak self] in self?.render() }
         if let button = statusItem.button {
             button.toolTip = "Pi Web"
         }
@@ -100,8 +101,53 @@ final class MenuController: NSObject, NSMenuDelegate {
 
         let toggleWindow = NSMenuItem(title: "显示 / 隐藏窗口", action: #selector(toggleWindowClicked), keyEquivalent: "")
         toggleWindow.target = self
-        toggleWindow.isEnabled = controller.activeURL != nil || appWindow.isVisible
+        toggleWindow.isEnabled = controller.activeURL != nil || appWindow.isVisible || appWindow.tabCount > 0
         menu.addItem(toggleWindow)
+
+        // Tab actions live in the status menu too (without key equivalents —
+        // the real NSApp.mainMenu owns those). The submenu lists every open
+        // tab and checkmarks the selected one.
+        let newTab = NSMenuItem(title: "新建标签页", action: #selector(newTabClicked), keyEquivalent: "")
+        newTab.target = self
+        menu.addItem(newTab)
+
+        let closeTab = NSMenuItem(title: "关闭标签页", action: #selector(closeTabClicked), keyEquivalent: "")
+        closeTab.target = self
+        closeTab.isEnabled = appWindow.tabCount > 0
+        menu.addItem(closeTab)
+
+        let nextTab = NSMenuItem(title: "下一个标签页", action: #selector(nextTabClicked), keyEquivalent: "")
+        nextTab.target = self
+        nextTab.isEnabled = appWindow.tabCount > 1
+        menu.addItem(nextTab)
+
+        let previousTab = NSMenuItem(title: "上一个标签页", action: #selector(previousTabClicked), keyEquivalent: "")
+        previousTab.target = self
+        previousTab.isEnabled = appWindow.tabCount > 1
+        menu.addItem(previousTab)
+
+        let tabsItem = NSMenuItem(title: "标签页", action: nil, keyEquivalent: "")
+        if appWindow.tabCount == 0 {
+            tabsItem.isEnabled = false
+        } else {
+            let tabsMenu = NSMenu()
+            let titles = appWindow.tabTitles
+            for index in 0..<appWindow.tabCount {
+                let title = index < titles.count ? titles[index] : ""
+                let item = NSMenuItem(
+                    title: "\(index + 1) \(title)",
+                    action: #selector(selectTabClicked(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.tag = index
+                item.state = (index == appWindow.selectedTabIndex) ? .on : .off
+                tabsMenu.addItem(item)
+            }
+            tabsItem.submenu = tabsMenu
+            tabsItem.isEnabled = true
+        }
+        menu.addItem(tabsItem)
 
         let start = NSMenuItem(title: "启动 Pi Web", action: #selector(startClicked), keyEquivalent: "s")
         start.target = self
@@ -218,6 +264,7 @@ final class MenuController: NSObject, NSMenuDelegate {
             + "hotkeyEnabled=\(Preferences.hotKeyEnabled) hotkeyMode=\(hotKey.mode.rawValue) "
             + "inputMonitoring=\(HotKeyMonitor.inputMonitoringGranted) accessibility=\(HotKeyMonitor.accessibilityGranted) "
             + "windowVisible=\(appWindow.isVisible) "
+            + "tabs=\(appWindow.tabCount) selectedTab=\(appWindow.selectedTabIndex) "
             + "version=\(VersionInfo.displayVersion) "
             + "last=\(menu.items.last?.title ?? "<none>") items=\(titles.joined(separator: " | "))"
         )
@@ -228,6 +275,12 @@ final class MenuController: NSObject, NSMenuDelegate {
     @objc private func openClicked() {
         appWindow.show(url: controller.activeURL)
     }
+
+    @objc private func newTabClicked() { appWindow.newTab(url: nil) }
+    @objc private func closeTabClicked() { appWindow.closeCurrentTab() }
+    @objc private func nextTabClicked() { appWindow.selectNextTab() }
+    @objc private func previousTabClicked() { appWindow.selectPreviousTab() }
+    @objc private func selectTabClicked(_ sender: NSMenuItem) { appWindow.selectTab(at: sender.tag) }
 
     @objc private func toggleWindowClicked() {
         appWindow.toggle(url: controller.activeURL)

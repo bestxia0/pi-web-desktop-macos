@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Darwin
 
@@ -34,6 +35,12 @@ enum SelfTest {
         testHotKeyClassifier()
         testHotKeyDebounce()
         testWindowToggleDecision()
+        testTabPalette()
+        testTabSupportRewriteBase()
+        testTabSupportIndexAfterClose()
+        testTabSupportNeighborIndex()
+        testTabSupportNewTabURL()
+        testTabStoreRoundTrip()
         testVersionComposition()
 
         print("\n\(checks) checks, \(failures) failure(s)")
@@ -419,6 +426,106 @@ enum SelfTest {
               "hidden -> show")
         check(AppWindowController.toggleAction(isVisible: false, isKey: true) == .show,
               "hidden (key stale) -> show")
+    }
+
+    private static func testTabPalette() {
+        print("tab palette")
+        check(!TabPalette.entries.isEmpty, "palette has entries")
+        check(TabPalette.entries.first?.name == "无颜色", "first entry is 无颜色")
+        check(TabPalette.color(at: 0) == nil, "index 0 is nil (no colour)")
+        check(TabPalette.color(at: 1) != nil, "index 1 has a colour")
+        check(TabPalette.name(at: 0) == "无颜色", "name(at:0) is 无颜色")
+        check(TabPalette.name(at: -5) == "无颜色", "negative index clamps to 无颜色")
+        check(TabPalette.name(at: 999) == "无颜色", "out-of-range index clamps to 无颜色")
+        check(TabPalette.color(at: -5) == nil, "negative index clamps to nil colour")
+        check(TabPalette.color(at: 999) == nil, "out-of-range index clamps to nil colour")
+    }
+
+    private static func testTabSupportRewriteBase() {
+        print("tab rewriteBase")
+        check(
+            TabSupport.rewriteBase("http://127.0.0.1:30151/?session=abc", to: "http://127.0.0.1:30141")
+                == "http://127.0.0.1:30141/?session=abc",
+            "rewrites host and port, preserves query"
+        )
+        check(
+            TabSupport.rewriteBase("http://127.0.0.1:30151/foo/bar", to: "http://127.0.0.1:30141")
+                == "http://127.0.0.1:30141/foo/bar",
+            "preserves path when there is no query"
+        )
+        let invalid = "ht tp://bad host"
+        check(TabSupport.rewriteBase(invalid, to: "http://127.0.0.1:30141") == invalid,
+              "unparseable URL returns original")
+        check(
+            TabSupport.rewriteBase("http://127.0.0.1:30151/?session=a#frag", to: "http://127.0.0.1:30141")
+                == "http://127.0.0.1:30141/?session=a#frag",
+            "preserves the URL fragment"
+        )
+    }
+
+    private static func testTabSupportIndexAfterClose() {
+        print("tab index after close")
+        check(TabSupport.indexAfterClose(closed: 0, count: 3) == 0, "(0,3) -> 0")
+        check(TabSupport.indexAfterClose(closed: 1, count: 3) == 1, "(1,3) -> 1")
+        check(TabSupport.indexAfterClose(closed: 2, count: 3) == 1, "(2,3) -> 1")
+        check(TabSupport.indexAfterClose(closed: 0, count: 1) == nil, "(0,1) -> nil")
+        check(TabSupport.indexAfterClose(closed: 0, count: 0) == nil, "(0,0) -> nil")
+    }
+
+    private static func testTabSupportNeighborIndex() {
+        print("tab neighbour index")
+        check(TabSupport.neighborIndex(current: 0, count: 3, delta: 1) == 1, "forward advances")
+        check(TabSupport.neighborIndex(current: 2, count: 3, delta: 1) == 0, "forward wraps")
+        check(TabSupport.neighborIndex(current: 0, count: 3, delta: -1) == 2, "backward wraps")
+        check(TabSupport.neighborIndex(current: 1, count: 3, delta: -1) == 0, "backward retreats")
+        check(TabSupport.neighborIndex(current: 0, count: 0, delta: 1) == 0, "empty count -> 0")
+        check(TabSupport.neighborIndex(current: 5, count: 0, delta: -1) == 0,
+              "empty count -> 0 regardless of current")
+    }
+
+    private static func testTabSupportNewTabURL() {
+        print("tab new URL")
+        let base = "http://127.0.0.1:30141"
+        check(
+            TabSupport.newTabURL(base: base, activeURL: "\(base)/?cwd=/Users/x/proj")
+                == "\(base)/?cwd=%2FUsers%2Fx%2Fproj",
+            "encodes the active tab's cwd"
+        )
+        check(TabSupport.newTabURL(base: base, activeURL: "\(base)/?session=abc") == "\(base)/",
+              "no cwd -> session list root")
+        check(TabSupport.newTabURL(base: base, activeURL: nil) == "\(base)/",
+              "nil active URL -> session list root")
+        check(TabSupport.newTabURL(base: base, activeURL: "\(base)/?cwd=") == "\(base)/",
+              "empty cwd -> session list root")
+    }
+
+    private static func testTabStoreRoundTrip() {
+        print("tab store round-trip")
+        guard let suite = UserDefaults(suiteName: "com.piweb.desktop.selftest.tabs") else {
+            check(false, "could not create isolated UserDefaults suite")
+            return
+        }
+        suite.removeObject(forKey: TabStore.tabsKey)
+        suite.removeObject(forKey: TabStore.selectedKey)
+
+        let absent = TabStore.load(from: suite)
+        check(absent.tabs.isEmpty && absent.selected == 0, "absent data returns empty")
+
+        let tabs = [
+            TabRecord(url: "http://127.0.0.1:30141/?session=a", color: 3),
+            TabRecord(url: "http://127.0.0.1:30141/?session=b", color: 0),
+        ]
+        TabStore.save(tabs: tabs, selected: 1, to: suite)
+        let loaded = TabStore.load(from: suite)
+        check(loaded.tabs == tabs, "round-trips tabs")
+        check(loaded.selected == 1, "round-trips selected index")
+
+        suite.set(Data("not json".utf8), forKey: TabStore.tabsKey)
+        let corrupt = TabStore.load(from: suite)
+        check(corrupt.tabs.isEmpty && corrupt.selected == 0, "corrupt data returns empty")
+
+        suite.removeObject(forKey: TabStore.tabsKey)
+        suite.removeObject(forKey: TabStore.selectedKey)
     }
 
     private static func testVersionComposition() {

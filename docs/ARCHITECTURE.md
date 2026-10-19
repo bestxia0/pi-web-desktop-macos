@@ -3,9 +3,10 @@
 Pi Web Desktop is a menu bar **launcher** for a local `pi-web` server. It owns
 no server: its job is to detect, start, open and stop the `pi-web` process, and
 to make that visible in the menu bar. The GUI presents the UI in its own
-**single native `WKWebView` window** (`AppWindowController`), reused for every
-open instead of spawning browser windows; Chrome app mode survives only as the
-fallback for the headless `--open-url` flag and `--resolve`.
+**single native `NSWindow`** (`AppWindowController`) with a native tab strip —
+each tab is an independent `WKWebView` loaded at its own pi-web URL. Chrome app
+mode survives only as the fallback for the headless `--open-url` flag and
+`--resolve`.
 
 ```
   right ⌥ ──► HotKeyMonitor (CGEvent tap / NSEvent monitors)
@@ -13,7 +14,7 @@ fallback for the headless `--open-url` flag and `--resolve`.
                     ▼
                  ┌──────────────────────────┐      ┌────────────────────────────┐
    menu bar  ◄───┤ MenuController           │─────►│ AppWindowController        │
-                 │ (AppKit, NSStatusItem)   │ show │ (single NSWindow+WKWebView)│
+                 │ (AppKit, NSStatusItem)   │ show │ (single NSWindow + tab bar)│
                  └───────────────┬──────────┘      └────────────────────────────┘
                                  │ reads state / calls actions
                  ┌───────────────▼──────────────────────────┐
@@ -45,7 +46,11 @@ build.
 | `AppConfig.swift` | Constants and path resolution: default port `30141`, fallback base `30151`, host `127.0.0.1`, bundle id, and the agent-directory expansion (`PI_CODING_AGENT_DIR` with `~` / `~/` / `file://` handling, else `~/.pi/agent`). Also the log file, support directory and lock file paths. Mirrors pi-web's `bin/run-records.js` `getAgentDir()` so both read the same records. |
 | `StatusController.swift` | The orchestrator. Owns `Phase` (`stopped` / `starting` / `running` / `stopping` / `failed`), the human-readable `detail`, `activeURL`, `ownedPid`, `attached`, `liveInstances` and `lastError`. Implements `refresh`, `start`, `stop`, `stopInstance`, `openWindow` and `stopForQuit`. Decides owned-vs-attached per instance and always re-detects after a stop. |
 | `MenuController.swift` | Builds the `NSStatusItem` menu and icon. Owns `updateIcon()` (SF Symbol + `Pi` title, tinted by phase), `buildMenu()`, the per-instance stop submenu wiring, the `AppWindowController`/`HotKeyMonitor` items, and `revealMenu()` (used by the activate notification). Logs a `menu build:` line describing the menu it actually built — the regression evidence that the version row exists and is last. |
-| `AppWindow.swift` | Owns the single native `NSWindow` + `WKWebView` that renders the pi-web UI. `show(url:)` reuses and focuses the window, reloading only when the URL actually changed; `toggle(url:)` hides when the window is visible *and* key, otherwise shows. `windowShouldClose` orders the window out instead of destroying it, and external links open in the system browser. `toggleAction(isVisible:isKey:)` is pure and covered by `--self-test`. |
+| `AppWindow.swift` | Owns the single native `NSWindow` and its tab strip. One `WKWebView` per tab, each loaded at its own pi-web URL; `show(url:)` creates the window once, restores persisted tabs (rewriting their URLs onto the current base) or creates a first tab, then only focuses. `toggle(url:)` hides when the window is visible *and* key, otherwise shows; `windowShouldClose` orders the window out, while ⌘W closes the *current tab* and hides the window when it was the last. Also implements `WKNavigationDelegate` (external links to the browser) and `WKUIDelegate` (`window.open` → native tab). `toggleAction(isVisible:isKey:)` is pure and covered by `--self-test`. |
+| `TabBar.swift` | The native tab strip: `TabPalette` (the 11 adaptive colours, index 0 = 无颜色), the `TabBarDelegate` protocol, `TabBarView` (34pt horizontally scrolling strip + trailing `+`) and `TabItemView` (colour dot / truncating title / borderless close button + right-click colour menu). AppKit-only; the pure arithmetic lives in `TabSupport`. |
+| `TabStore.swift` | `TabRecord` and the `TabStore` JSON codec over `UserDefaults` (`PiWebTabs` / `PiWebTabsSelected`). Missing or corrupt data degrades to "no tabs". |
+| `TabSupport.swift` | Pure, AppKit-free tab helpers shared by `AppWindowController` and `--self-test`: `rewriteBase` (scheme/host/port swap preserving path+query), `indexAfterClose`, `neighborIndex`, `newTabURL`. |
+| `MainMenu.swift` | Builds the real `NSApp.mainMenu` (App / 编辑 / 标签页 / 浏览). The browser-style shortcuts (⌘T, ⌘W, ⌘1…9, ⌘⇧[ / ⌘⇧], ⌘[ / ⌘], ⌘R) and the nil-target Edit selectors must live here: a status-item menu's key equivalents only fire while that menu is open. |
 | `HotKeyMonitor.swift` | The right-Option global hotkey. `classify(keyCode:flags:)` is pure (right Option `61` only; left Option `58` is ignored) and `start()` prefers a listen-only `CGEvent` tap over `NSEvent` global/local monitors. Exposes the Input Monitoring / Accessibility checks and the System Settings deep link, and never consumes events. |
 | `ProcessManager.swift` | Resolves, spawns and stops the child. `start(port:spec:childPATH:)` returns the child pid; `waitForReady(url:timeout:)` polls until the URL answers; `stop()` performs the `SIGINT → 10s → SIGTERM → 5s → SIGKILL` escalation. Tracks `ownedPid` / `hasOwnedProcess`. |
 | `RunRecords.swift` | Detection. `RunRecordStore(directory:)` loads every `*.json`, and `detectLiveInstances()` classifies each record: liveness via `kill(pid, 0)` (`EPERM` counts), then ownership via `ps -ww -p <pid> -o args=`, and only then an HTTP probe of the recorded URL. Read-only: it never deletes a record. |
@@ -159,15 +164,31 @@ system frameworks. It has no package manifest to resolve, no lockfile to drift,
 and no supply chain beyond Apple's SDK — which matters for a small tool that
 spawns processes on your behalf.
 
-**The single native window.** There is exactly one `NSWindow`/`WKWebView` for
-the whole process (`AppWindowController`). `打开 Pi Web`, the right-Option
-toggle and the launch path all route through `show(url:)`, which creates the
-window on first use and reuses it afterwards. It only calls
-`webView.load` when `loadedURL` differs from the requested URL, so focusing the
-window never triggers a reload; closing it (red button / Cmd+W) hits
-`windowShouldClose` and merely `orderOut`s it. Because the app is `.accessory`
-(`LSUIElement`), showing a key window requires an explicit
+**One window, many tabs.** There is exactly one `NSWindow`
+(`AppWindowController`) for the whole process; inside it, each tab is its own
+`WKWebView`. `打开 Pi Web`, the right-Option toggle and the launch path all
+route through `show(url:)`, which creates the window on first use, restores the
+persisted tabs (rewriting their URLs onto the current pi-web base) or creates a
+first tab, and then only focuses on later calls. Closing the window (red button)
+hits `windowShouldClose` and merely `orderOut`s it; ⌘W instead closes the
+*current tab*, and closing the last tab also hides the window. Because the app
+is `.accessory` (`LSUIElement`), showing a key window requires an explicit
 `NSApp.activate(ignoringOtherApps: true)` before `makeKeyAndOrderFront`.
+
+**Tabs vs sessions.** A pi-web "session" is a query-parameter view of the one
+client-rendered route (`/?session=<id>`), not a separate document. A tab is a
+separate `WKWebView` at its own URL, so two tabs can show two sessions at once
+while sharing only the sidebar/localStorage layout keys. Manually created tabs
+load the session list (scoped to the active tab's `cwd`), never a new session:
+the launcher must not mutate server state on its own. `WKUIDelegate.createWebView`
+captures pi-web's own `window.open('?session=<id>')` and turns it into a native
+tab, but that is a convenience — manual creation works without it.
+
+**Why the main menu owns the shortcuts.** A `NSStatusItem` menu's key
+equivalents are only dispatched while that menu is open, so ⌘T / ⌘W / ⌘1…9 /
+⌘⇧[ / ⌘⇧] and the Edit menu cannot live there. `MainMenu.swift` builds a real
+`NSApp.mainMenu` for them and targets the tab actions at `AppWindowController`
+directly; the status menu mirrors the tab actions without key equivalents.
 
 **Right Option only.** A modifier-only global hotkey cannot be registered with
 Carbon's `RegisterEventHotKey`, so `HotKeyMonitor` uses a listen-only

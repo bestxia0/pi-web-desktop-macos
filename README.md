@@ -16,19 +16,19 @@ A tiny native macOS menu bar launcher for the **pi-web** web UI: it detects, reu
 
 | What it is | What it is not |
 | --- | --- |
-| A native Swift + AppKit `NSStatusItem` menu bar app (`LSUIElement`, no Dock icon) | A browser or Electron shell — it hosts its own single native `WKWebView` window, not a bundled browser engine |
+| A native Swift + AppKit `NSStatusItem` menu bar app (`LSUIElement`, no Dock icon) | A browser or Electron shell — it hosts its own single native window with multiple `WKWebView` tabs, not a bundled browser engine |
 | A **launcher only**: it finds, starts and stops the `pi-web` CLI for you | A bundler — it never ships Node, npm or the `pi-web` package |
 | A front end for the upstream `pi-web` service on `127.0.0.1` | A replacement for `pi-web`; the CLI and `node` must already be installed |
 | A **zero-dependency** app built by `swiftc` alone | Dependent on SPM, CocoaPods or any third-party package |
 
-> **Runtime dependency:** a globally installed `pi-web` CLI plus `node`. The app presents the UI in its own single native `WKWebView` window (reused on every open); it bundles no browser engine and no Node.
+> **Runtime dependency:** a globally installed `pi-web` CLI plus `node`. The app presents the UI in its own single native window with multiple `WKWebView` tabs (reused on every open); it bundles no browser engine and no Node.
 
 ## Features
 
 - **Menu bar native** — a single `NSStatusItem` with an SF Symbol plus a short `Pi` title, coloured by state (green running / orange busy / red failed), and no Dock icon.
 - **Detect, then reuse** — on every launch it runs the same run-record contract as `pi-web` and attaches to a healthy existing instance instead of starting a second one.
 - **Start on demand** — spawns `pi-web --port <N> --no-open` on a free port, waits (up to 60s) until the URL answers, then opens the UI.
-- **Native single window** — the UI renders in one reusable `WKWebView` window; opening it again focuses that window instead of spawning another, and closing it hides rather than destroys it.
+- **Native single window with tabs** — the UI renders in one reusable `NSWindow` with multiple `WKWebView` tabs; opening it again focuses it instead of spawning another, `⌘W` closes the current tab, and the red button / hotkey hide the whole window rather than destroying it.
 - **Right-Option global hotkey** — tapping the **right** Option key toggles the window (hide when visible and frontmost, otherwise show + focus). The left Option key never triggers anything, and right Option keeps working as a normal modifier elsewhere.
 - **Two stop paths** — the instance it owns gets a `SIGINT → SIGTERM → SIGKILL` escalation; an attached instance is stopped through upstream `pi-web stop --port N` after a confirmation prompt.
 - **Port fallback** — `bind()`-probes `30141`, scans upward from `30151`, then falls back to a kernel-assigned ephemeral port, because `pi-web` itself has no fallback.
@@ -47,7 +47,7 @@ A tiny native macOS menu bar launcher for the **pi-web** web UI: it detects, reu
 *The full menu: open, start, stop, refresh, logs, Start at Login, quit behaviour and the version row.*
 
 ![The pi-web console UI running locally](docs/images/image-20261019134737277.png)
-*The `pi-web` console UI rendered in the app's own native `WKWebView` window.*
+*The `pi-web` console UI rendered in one of the app's own native `WKWebView` tabs.*
 
 ## Requirements
 
@@ -90,8 +90,13 @@ Menu items are shown in Simplified Chinese. The table below lists them top to bo
 | --- | --- | --- |
 | `Pi Web — <detail>` | Status header at the top of the menu; shows the current phase, active URL/version or instance count. | Always present, disabled (display only). |
 | `错误：<message>` | Surfaces the most recent failure (newlines flattened to one line). | Appears only when there is an error. |
-| 打开 Pi Web | Shows the active URL in the app's single native window (creating it if needed). Loads the URL only when it changed since the last load. Key equivalent `O`. | Enabled only while a live instance URL is known. |
+| 打开 Pi Web | Reveals the app's single native window (creating it if needed) and restores persisted tabs. Key equivalent `O`. | Enabled only while a live instance URL is known. |
 | 显示 / 隐藏窗口 | Toggles the single native window: hides it when it is visible and frontmost, otherwise shows and focuses it. | Enabled while a live instance URL is known or a window already exists. |
+| 新建标签页 | Opens a new native tab manually (the bar's `+`, or ⌘T in the real main menu). With no explicit URL it loads the session list scoped to the active tab's `cwd`, else the unscoped list. Never creates a server-side session. | Always enabled. |
+| 关闭标签页 | Closes the current tab. When it was the last tab the window hides (`orderOut`). | Enabled when at least one tab is open. |
+| 下一个标签页 | Selects the next tab (wraps). | Enabled when more than one tab is open. |
+| 上一个标签页 | Selects the previous tab (wraps). | Enabled when more than one tab is open. |
+| 标签页 | Submenu listing every open tab (`<n> <title>`); selecting one focuses it and the current tab is checkmarked. | Disabled when no tabs are open. |
 | 启动 Pi Web | Detects first; attaches to an existing instance, otherwise starts one with `--no-open` on a free port and opens it. Key equivalent `S`. | Enabled only when the launcher is stopped or failed. |
 | 停止 Pi Web | Stops the instance. Owned → `SIGINT → 10s → SIGTERM → 5s → SIGKILL`; attached → a confirmation prompt, then upstream `pi-web stop --port N`. | Enabled when exactly one live instance. With several it becomes `停止 Pi Web（N 个实例）` with a per-instance submenu (`<url>  pid <pid>（本壳）` for owned). |
 | 刷新状态 | Re-runs detection and republishes the menu. Key equivalent `R`. | Always enabled. |
@@ -102,7 +107,7 @@ Menu items are shown in Simplified Chinese. The table below lists them top to bo
 | 右侧 Option 唤起窗口 | Checkbox: enables/disables the right-Option global hotkey. Persisted in UserDefaults key `PiWebHotKeyEnabled`. | Checkbox, default **on**. Toggling immediately starts/stops `HotKeyMonitor`. |
 | 退出 Pi Web | Stops the owned child (and, when the toggle is on, every attached instance), then quits. Key equivalent `Q`. | Always enabled. |
 | ⚠︎ 需要「输入监控」权限——点击授权 | Requests Input Monitoring (`CGRequestListenEventAccess`) and opens System Settings > Privacy & Security > Input Monitoring. | Appears only while Input Monitoring is not granted, just before the version row. |
-| `V<semver>-<builddate>` | The launcher version, e.g. `V0.6.0-20261019`. | Always present, disabled (display only), last row. |
+| `V<semver>-<builddate>` | The launcher version, e.g. `V0.7.0-20261019`. | Always present, disabled (display only), last row. |
 
 ### Status icon
 
@@ -115,16 +120,23 @@ The status icon is drawn by `MenuController.updateIcon()`: an SF Symbol plus the
 | Stopped | `power.circle.fill` | Label colour |
 | Failed | `exclamationmark.triangle.fill` | Red |
 
-### Native window and right-Option hotkey
+### Native window, tabs and right-Option hotkey
 
-The GUI renders the pi-web UI in **one** native `NSWindow` + `WKWebView`
-(`AppWindowController`), created on first use and reused afterwards:
+The GUI renders the pi-web UI in **one** native `NSWindow`
+(`AppWindowController`) with a native tab strip at the top. Each tab is its own
+`WKWebView`, created on first use and reused afterwards:
 
-- Repeated `打开 Pi Web` / hotkey presses only focus the window. The web view
-  reloads only when the requested URL differs from the last loaded one.
-- Closing the window (red button / Cmd+W) hides it; it is never destroyed, so
-  reopening is instant and keeps scroll/back-forward state.
+- Repeated `打开 Pi Web` / hotkey presses only focus the window; a second window
+  is never spawned, and tabs are restored from `UserDefaults` on first show.
+- The **red close button** and the **right-Option hotkey** hide the whole window
+  (`orderOut`); it is never destroyed, so reopening is instant and keeps
+  scroll/back-forward state. The hotkey also reveals the window when no live
+  instance URL is known but tabs are still open.
+- `⌘W` closes the **current tab**; closing the last tab hides the window.
 - Links whose host is not `127.0.0.1`/`localhost` open in the system browser.
+
+See [Tabs (标签页)](#tabs-标签页) for manual creation, colours, navigation and
+persistence.
 
 Hitting the **right** Option key toggles the window: if it is visible and the
 key window it is hidden (`orderOut`), otherwise it is shown and focused
@@ -139,6 +151,36 @@ while the grant is missing the menu shows a `⚠︎ 需要「输入监控」权�
 item. Because the app is ad-hoc signed, a rebuild can reset the grant. Toggle
 the whole feature with the `右侧 Option 唤起窗口` menu item or the
 `PiWebHotKeyEnabled` preference.
+
+### Tabs (标签页)
+
+The single native window hosts a native tab bar at the top. Every tab is its own
+`WKWebView`, so different tabs can point at different pi-web sessions
+(`?session=<id>`) — or different `cwd` scopes — independently.
+
+- **Create** a tab manually with the `+` button at the right of the bar, ⌘T, or
+  the menu (`新建标签页`). Nothing is auto-created at startup; a new tab loads the
+  session list (scoped to the active tab's `cwd` when it has one) and never calls
+  a state-changing API.
+- **Colour** a tab from its right-click context menu (`颜色`): 无颜色, 红, 橙, 黄,
+  绿, 薄荷, 蓝, 靛蓝, 紫, 粉, 灰. The colours are adaptive system colours and the
+  dot is hidden for 无颜色. The same menu has `关闭标签页` and `关闭其他标签页`.
+- **Close / navigate**: ⌘W closes the current tab; closing the last tab hides
+  the window (`orderOut`). The red close button and the right-Option hotkey
+  still act on the whole window. ⌘⇧] / ⌘⇧[ select next/previous, ⌘1…⌘9 select the
+  Nth tab, ⌘[ / ⌘] go back/forward and ⌘R reloads.
+- **`window.open`**: pi-web's "open session in a new tab" becomes a native tab
+  (implemented via `WKUIDelegate`); links to other hosts open in the system
+  browser.
+- **Persistence**: each tab's URL + colour and the selected index are saved in
+  `UserDefaults` (`PiWebTabs` / `PiWebTabsSelected`). On the next launch each
+  stored URL's scheme/host/port is rewritten to the current pi-web base (the port
+  can change) while keeping the path and query.
+
+The browser-style shortcuts live in a real `NSApp.mainMenu` (`MainMenu.swift`),
+because a status-item menu's key equivalents only fire while that menu is open.
+The table above lists the status-item menu; the main menu adds ⌘T, ⌘W, ⌘⇧],
+⌘⇧[, ⌘1…⌘9, ⌘[, ⌘], ⌘R and the standard Edit shortcuts (⌘Z/⌘X/⌘C/⌘V/⌘A).
 
 ## Headless and verification flags
 
@@ -231,13 +273,13 @@ This only changes the *app* icon (Finder, Launchpad, Get Info). The **menu bar s
 
 ## Version
 
-`V0.6.0-20261019` is shown as the menu's last row, below `退出 Pi Web`, as a disabled display-only item. It comes from one place:
+`V0.7.0-20261019` is shown as the menu's last row, below `退出 Pi Web`, as a disabled display-only item. It comes from one place:
 
 | Source | Value | Written to Info.plist as |
 | --- | --- | --- |
-| `VERSION` file | `0.6.0` | `CFBundleShortVersionString` |
+| `VERSION` file | `0.7.0` | `CFBundleShortVersionString` |
 | `date +%Y%m%d` at build time | `20261019` | `CFBundleVersion` |
-| both, joined | `0.6.0-20261019` | `PiWebVersion` |
+| both, joined | `0.7.0-20261019` | `PiWebVersion` |
 
 So bumping the version is: edit `VERSION`, run `./build.sh`. Nothing is hardcoded in Swift and the date is never hand-maintained.
 
@@ -256,6 +298,8 @@ Stored in the bundle domain `com.piweb.desktop`. Set them with `defaults write c
 | `PiWebExecutablePath` | String | unset | Explicit path to the `pi-web` executable; highest discovery precedence. |
 | `PiWebLoginShellPATH` | String | unset | Cached `PATH` captured from the one-time login-shell probe. |
 | `PiWebLoginShellPiWeb` | String | unset | Cached path to `pi-web` captured from the login shell. |
+| `PiWebTabs` | Data (JSON) | unset | Persisted open tabs: an array of `{ "url": String, "color": Int }`. Rewritten onto the current pi-web base on restore. |
+| `PiWebTabsSelected` | Int | `0` | Index of the selected tab, persisted with `PiWebTabs`. |
 
 ### Environment variables
 
@@ -298,7 +342,11 @@ pi-web-desktop-macos/
 ├── Sources/                    Swift sources compiled by swiftc (no SPM)
 │   ├── main.swift              Entry point + headless verification modes + single-instance lock
 │   ├── MenuController.swift    NSStatusItem menu, icon and menu actions
-│   ├── AppWindow.swift         Single native NSWindow + WKWebView wrapper
+│   ├── MainMenu.swift          Real NSApp.mainMenu (App / 编辑 / 标签页 / 浏览 shortcuts)
+│   ├── AppWindow.swift         Single NSWindow + native tab strip, one WKWebView per tab
+│   ├── TabBar.swift            Native tab strip, colour palette and tab item views
+│   ├── TabStore.swift          UserDefaults persistence for tabs + selected index
+│   ├── TabSupport.swift        Pure tab URL rewrite / close / neighbour helpers
 │   ├── HotKeyMonitor.swift     Right-Option global hotkey (CGEvent tap / NSEvent monitors)
 │   ├── StatusController.swift  Detect / start / stop orchestration and UI state
 │   ├── ProcessManager.swift    pi-web resolution, child spawn, readiness, signal escalation

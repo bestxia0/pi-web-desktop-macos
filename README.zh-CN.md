@@ -19,12 +19,12 @@
 
 | 是什么 | 不是什么 |
 | --- | --- |
-| 一个原生的 Swift + AppKit `NSStatusItem` 菜单栏应用（`LSUIElement`，无 Dock 图标） | 不是浏览器或 Electron 外壳——它拥有自己的单个原生 `WKWebView` 窗口，而不是内嵌整个浏览器引擎 |
+| 一个原生的 Swift + AppKit `NSStatusItem` 菜单栏应用（`LSUIElement`，无 Dock 图标） | 不是浏览器或 Electron 外壳——它拥有自己的单个原生窗口与多个 `WKWebView` 标签页，而不是内嵌整个浏览器引擎 |
 | 一个**纯启动器**：为你查找、启动并停止 `pi-web` CLI | 不是打包器——从不附带 Node、npm 或 `pi-web` 包 |
 | 本地 `127.0.0.1` 上上游 `pi-web` 服务的前端 | 不是 `pi-web` 的替代品；CLI 与 `node` 必须已安装 |
 | 一个**零依赖**、仅由 `swiftc` 构建的应用 | 不依赖 SPM、CocoaPods 或任何第三方包 |
 
-> **运行时依赖：** 全局安装的 `pi-web` CLI 以及 `node`。本应用在自有的单个原生 `WKWebView` 窗口中呈现界面（每次打开都复用），不打包浏览器引擎，也不打包 Node。
+> **运行时依赖：** 全局安装的 `pi-web` CLI 以及 `node`。本应用在自有的单个原生窗口中呈现界面（多个 `WKWebView` 标签页，每次打开都复用），不打包浏览器引擎，也不打包 Node。
 
 
 
@@ -35,7 +35,7 @@
 - **原生菜单栏** —— 单个 `NSStatusItem`，使用 SF Symbol 加简短的 `Pi` 标题，按状态着色（运行绿色 / 忙碌橙色 / 失败红色），且没有 Dock 图标。
 - **先探测，再复用** —— 每次启动都执行与 `pi-web` 相同的运行记录契约，附加到健康的既有实例，而不是再启动一个。
 - **按需启动** —— 在空闲端口上启动 `pi-web --port <N> --no-open`，等待 URL 响应（最长 60 秒），然后打开界面。
-- **原生单窗口** —— 界面渲染在一个可复用的 `WKWebView` 窗口中；再次打开只聚焦该窗口而不再新建，关闭窗口只是隐藏而非销毁。
+- **原生单窗口 + 标签页** —— 界面渲染在一个可复用的 `NSWindow` 与多个 `WKWebView` 标签页中；再次打开只聚焦而不再新建，`⌘W` 关闭当前标签页，红点 / 热键隐藏整个窗口而非销毁。
 - **右侧 Option 全局热键** —— 敲击**右侧** Option 键即可切换窗口（在前台可见时隐藏，否则显示并聚焦）。左侧 Option 键绝不触发任何动作，且右侧 Option 在其他应用中仍可作为普通修饰键使用。
 - **两种停止路径** —— 由本壳启动的实例走 `SIGINT → SIGTERM → SIGKILL` 升级；附加实例在确认提示后通过上游 `pi-web stop --port N` 停止。
 - **端口回退** —— 用 `bind()` 探测 `30141`，从 `30151` 向上扫描，最后回退到内核分配的临时端口，因为 `pi-web` 本身没有回退。
@@ -53,7 +53,7 @@
 
 
 ![本地运行的 pi-web 控制台界面](docs/images/image-20261019134737277.png)
-*在应用自有的原生 `WKWebView` 窗口中渲染的 `pi-web` 控制台界面。*
+*在应用自有的某个原生 `WKWebView` 标签页中渲染的 `pi-web` 控制台界面。*
 
 ## 环境要求
 
@@ -96,8 +96,13 @@ make install
 | --- | --- | --- |
 | `Pi Web — <detail>` | 菜单顶部的状态标题；显示当前阶段、活动 URL/版本或实例数量。 | 始终存在，禁用（仅显示）。 |
 | `错误：<message>` | 展示最近一次失败（换行会压成一行）。 | 仅在存在错误时出现。 |
-| 打开 Pi Web | 在应用自己的单个原生窗口中显示活动 URL（必要时创建窗口）。仅当 URL 自上次加载后发生变化时才重新加载。快捷键 `O`。 | 仅在已知活动实例 URL 时可用。 |
+| 打开 Pi Web | 显示应用自己的单个原生窗口（必要时创建窗口），并恢复持久化的标签页。快捷键 `O`。 | 仅在已知活动实例 URL 时可用。 |
 | 显示 / 隐藏窗口 | 切换单个原生窗口：前台可见时隐藏，否则显示并聚焦。 | 在已知活动实例 URL 或窗口已存在时可用。 |
+| 新建标签页 | 手动新建原生标签页（标签栏右侧的 `+`，或真实主菜单中的 ⌘T）。未指定 URL 时加载会话列表：活动标签页有 `cwd` 时限定到该目录，否则不加限定；从不创建服务端会话。 | 始终可用。 |
+| 关闭标签页 | 关闭当前标签页。若为最后一个则隐藏窗口（`orderOut`）。 | 至少有一个标签页时可用。 |
+| 下一个标签页 | 选择下一个标签页（循环）。 | 多于一个标签页时可用。 |
+| 上一个标签页 | 选择上一个标签页（循环）。 | 多于一个标签页时可用。 |
+| 标签页 | 列出所有已打开标签页的子菜单（`<n> <标题>`）；选中即聚焦，当前项带勾选标记。 | 无标签页时禁用。 |
 | 启动 Pi Web | 先探测；附加到既有实例，否则在空闲端口以 `--no-open` 启动一个并打开。快捷键 `S`。 | 仅在启动器已停止或失败时可用。 |
 | 停止 Pi Web | 停止实例。自有 → `SIGINT → 10s → SIGTERM → 5s → SIGKILL`；附加 → 确认提示后执行上游 `pi-web stop --port N`。 | 恰好有一个活动实例时可用。有多个时变为 `停止 Pi Web（N 个实例）` 并带逐实例子菜单（自有项显示 `<url>  pid <pid>（本壳）`）。 |
 | 刷新状态 | 重新执行探测并重建菜单。快捷键 `R`。 | 始终可用。 |
@@ -108,7 +113,7 @@ make install
 | 右侧 Option 唤起窗口 | 复选框：启用/禁用右侧 Option 全局热键。持久化于 UserDefaults 键 `PiWebHotKeyEnabled`。 | 复选框，默认**开启**。切换会立即启动/停止 `HotKeyMonitor`。 |
 | 退出 Pi Web | 停止自有子进程（开关开启时还包括所有附加实例），然后退出。快捷键 `Q`。 | 始终可用。 |
 | ⚠︎ 需要「输入监控」权限——点击授权 | 请求输入监控（`CGRequestListenEventAccess`）并打开系统设置 > 隐私与安全性 > 输入监控。 | 仅在未授予输入监控时出现，位于版本行之前。 |
-| `V<semver>-<builddate>` | 启动器版本，例如 `V0.6.0-20261019`。 | 始终存在，禁用（仅显示），最后一行。 |
+| `V<semver>-<builddate>` | 启动器版本，例如 `V0.7.0-20261019`。 | 始终存在，禁用（仅显示），最后一行。 |
 
 ### 状态图标
 
@@ -121,17 +126,32 @@ make install
 | 已停止 | `power.circle.fill` | 标签色 |
 | 失败 | `exclamationmark.triangle.fill` | 红色 |
 
-### 原生窗口与右侧 Option 热键
+### 原生窗口、标签页与右侧 Option 热键
 
-GUI 在**一个**原生 `NSWindow` + `WKWebView`（`AppWindowController`）中渲染 pi-web 界面，首次使用时创建，之后复用：
+GUI 在**一个**原生 `NSWindow`（`AppWindowController`）中渲染 pi-web 界面，顶部带有原生标签栏。每个标签页都是独立的 `WKWebView`，首次使用时创建，之后复用：
 
-- 重复点击 `打开 Pi Web` / 按热键只会聚焦窗口。仅当请求的 URL 与上次加载的不同时才重新加载 WebView。
-- 关闭窗口（红点 / Cmd+W）只是隐藏，从不销毁；因此再次打开是瞬时的，并保留滚动与前进/后退状态。
+- 重复点击 `打开 Pi Web` / 按热键只会聚焦窗口，绝不新建第二个窗口；首次显示时会从 `UserDefaults` 恢复标签页。
+- **红色关闭按钮**与**右侧 Option 热键**隐藏整个窗口（`orderOut`），从不销毁；因此再次打开是瞬时的，并保留滚动与前进/后退状态。在未探测到活动实例 URL 但仍有打开的标签页时，热键也能唤出窗口。
+- `⌘W` 关闭**当前标签页**；关闭最后一个标签页时隐藏窗口。
 - host 不是 `127.0.0.1`/`localhost` 的链接会在系统浏览器中打开。
+
+手动新建、颜色、导航与持久化详见[标签页](#标签页)一节。
 
 敲击**右侧** Option 键切换窗口：若窗口可见且为 key window 则隐藏（`orderOut`），否则显示并聚焦（`NSApp.activate` + `makeKeyAndOrderFront`）。**左侧** Option 键被完全忽略，且监听器从不吞掉事件，因此右侧 Option 在其他应用中仍可作为修饰键。
 
 热键使用仅监听（listen-only）的 `CGEvent` tap，若无法创建则回退到 `NSEvent` 全局/本地监视器。macOS 需要 **输入监控** 权限（系统设置 > 隐私与安全性 > 输入监控）；未授予时菜单会显示 `⚠︎ 需要「输入监控」权限——点击授权`。由于应用是 ad-hoc 签名，重新构建可能重置该授权。可用 `右侧 Option 唤起窗口` 菜单项或 `PiWebHotKeyEnabled` 偏好全局开关该功能。
+
+### 标签页
+
+单个原生窗口顶部带有原生标签栏。每个标签页都是独立的 `WKWebView`，因此不同标签页可各自指向不同的 pi-web 会话（`?session=<id>`）或不同的 `cwd` 范围。
+
+- **新建**：用标签栏右侧的 `+`、⌘T 或菜单（`新建标签页`）手动创建。启动时不会自动创建任何标签页；新标签页加载会话列表（活动标签页有 `cwd` 时限定到该目录），且从不调用改变状态的 API。
+- **颜色**：右键标签页打开 `颜色` 子菜单：无颜色、红、橙、黄、绿、薄荷、蓝、靛蓝、紫、粉、灰。颜色为自适应系统颜色，`无颜色` 时隐藏圆点。同一菜单还包含 `关闭标签页` 与 `关闭其他标签页`。
+- **关闭 / 切换**：⌘W 关闭当前标签页；关闭最后一个标签页时隐藏窗口（`orderOut`）。红色关闭按钮与右侧 Option 热键仍作用于整个窗口。⌘⇧] / ⌘⇧[ 切换下一个/上一个，⌘1…⌘9 切换到第 N 个，⌘[ / ⌘] 后退/前进，⌘R 重新加载。
+- **`window.open`**：pi-web 自带的“在新标签页中打开会话”会变成原生标签页（通过 `WKUIDelegate` 实现）；指向其他 host 的链接则在系统浏览器中打开。
+- **持久化**：每个标签页的 URL + 颜色以及选中索引保存在 `UserDefaults`（`PiWebTabs` / `PiWebTabsSelected`）。下次启动时会把存储 URL 的 scheme/host/port 重写为当前的 pi-web base（端口可能变化），并保留 path 与 query。
+
+浏览器式快捷键位于真实的 `NSApp.mainMenu`（`MainMenu.swift`），因为状态栏菜单的快捷键仅在该菜单展开时生效。上表列出的是状态栏菜单；主菜单另外提供 ⌘T、⌘W、⌘⇧]、⌘⇧[、⌘1…⌘9、⌘[、⌘]、⌘R 以及标准编辑快捷键（⌘Z/⌘X/⌘C/⌘V/⌘A）。
 
 ## 无头与验证标志
 
@@ -224,13 +244,13 @@ bundle 图标来自 `Resources/AppIcon.jpg`，由 `build.sh` 通过 `sips` + `ic
 
 ## 版本
 
-`V0.6.0-20261019` 作为菜单最后一行显示在 `退出 Pi Web` 下方，是禁用且仅用于显示的条目。它来自唯一一处：
+`V0.7.0-20261019` 作为菜单最后一行显示在 `退出 Pi Web` 下方，是禁用且仅用于显示的条目。它来自唯一一处：
 
 | 来源 | 值 | 写入 Info.plist 为 |
 | --- | --- | --- |
-| `VERSION` 文件 | `0.6.0` | `CFBundleShortVersionString` |
+| `VERSION` 文件 | `0.7.0` | `CFBundleShortVersionString` |
 | 构建时的 `date +%Y%m%d` | `20261019` | `CFBundleVersion` |
-| 两者拼接 | `0.6.0-20261019` | `PiWebVersion` |
+| 两者拼接 | `0.7.0-20261019` | `PiWebVersion` |
 
 因此升级版本就是：编辑 `VERSION`，运行 `./build.sh`。Swift 中没有任何硬编码，日期也从不手工维护。
 
@@ -249,6 +269,8 @@ bundle 图标来自 `Resources/AppIcon.jpg`，由 `build.sh` 通过 `sips` + `ic
 | `PiWebExecutablePath` | String | 未设置 | `pi-web` 可执行文件的显式路径；发现优先级最高。 |
 | `PiWebLoginShellPATH` | String | 未设置 | 一次性登录 shell 探测捕获并缓存的 `PATH`。 |
 | `PiWebLoginShellPiWeb` | String | 未设置 | 从登录 shell 捕获并缓存的 `pi-web` 路径。 |
+| `PiWebTabs` | Data (JSON) | 未设置 | 持久化的已打开标签页：`{ "url": String, "color": Int }` 数组。恢复时会重写到当前 pi-web base。 |
+| `PiWebTabsSelected` | Int | `0` | 选中标签页的索引，与 `PiWebTabs` 一同持久化。 |
 
 ### 环境变量
 
@@ -291,7 +313,11 @@ pi-web-desktop-macos/
 ├── Sources/                    由 swiftc 编译的 Swift 源码（无 SPM）
 │   ├── main.swift              入口 + 无头验证模式 + 单实例锁
 │   ├── MenuController.swift    NSStatusItem 菜单、图标与菜单动作
-│   ├── AppWindow.swift         单个原生 NSWindow + WKWebView 封装
+│   ├── MainMenu.swift          真实 NSApp.mainMenu（App / 编辑 / 标签页 / 浏览 快捷键）
+│   ├── AppWindow.swift         单个 NSWindow + 原生标签栏，每个标签页一个 WKWebView
+│   ├── TabBar.swift            原生标签栏、调色板与标签项视图
+│   ├── TabStore.swift          标签页 + 选中索引的 UserDefaults 持久化
+│   ├── TabSupport.swift        纯函数：标签 URL 重写 / 关闭 / 相邻索引
 │   ├── HotKeyMonitor.swift     右侧 Option 全局热键（CGEvent tap / NSEvent 监视器）
 │   ├── StatusController.swift  探测 / 启动 / 停止编排与 UI 状态
 │   ├── ProcessManager.swift    pi-web 解析、子进程启动、就绪等待、信号升级

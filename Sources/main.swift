@@ -391,6 +391,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.appWindow.show(url: url)
         }
 
+        // A real main menu, not the status item, owns the browser-style tab
+        // shortcuts (⌘T / ⌘W / ⌘1…9 / ⌘⇧[ / ⌘⇧]) and the standard Edit menu.
+        NSApp.mainMenu = MainMenu.build(tabTarget: appWindow)
+
         let hotKey = HotKeyMonitor()
         hotKey.onToggle = { [weak self] in
             guard let self else { return }
