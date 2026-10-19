@@ -29,6 +29,10 @@ final class HotKeyMonitor {
     var onToggle: (() -> Void)?
     private(set) var isDown = false
     private(set) var mode: Mode = .inactive
+    /// How many times macOS has disabled the event tap
+    /// (`.tapDisabledByTimeout` / `.tapDisabledByUserInput`); surfaced in the
+    /// `menu build:` log so a dead-after-rebuild grant is diagnosable.
+    private(set) var tapDisabledCount = 0
     var enabled = true
 
     private var started = false
@@ -84,6 +88,7 @@ final class HotKeyMonitor {
             guard let userInfo else { return Unmanaged.passUnretained(event) }
             let monitor = Unmanaged<HotKeyMonitor>.fromOpaque(userInfo).takeUnretainedValue()
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                monitor.tapDisabledCount += 1
                 monitor.isDown = false
                 if let tap = monitor.eventTap {
                     CGEvent.tapEnable(tap: tap, enable: true)
@@ -203,6 +208,27 @@ final class HotKeyMonitor {
     static var inputMonitoringGranted: Bool { CGPreflightListenEventAccess() }
 
     static func requestInputMonitoring() { CGRequestListenEventAccess() }
+
+    /// Clears the stale TCC entry for Input Monitoring. This cannot *create* a
+    /// grant; it only removes a stale/mismatched one so the next request shows
+    /// the system prompt again. Runs `/usr/bin/tccutil reset ListenEvent
+    /// <bundle id>` synchronously and returns its exit status.
+    @discardableResult
+    static func resetInputMonitoringGrant() -> Int32 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        process.arguments = ["reset", "ListenEvent", AppConfig.bundleIdentifier]
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            Logger.shared.error("hotkey: tccutil reset failed to launch: \(error.localizedDescription)")
+            return -1
+        }
+        let status = process.terminationStatus
+        Logger.shared.info("hotkey: tccutil reset ListenEvent exit=\(status)")
+        return status
+    }
 
     static var accessibilityGranted: Bool { AXIsProcessTrusted() }
 

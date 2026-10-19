@@ -2,8 +2,12 @@
 #
 # Builds PiWeb.app with swiftc only (no SPM / CocoaPods / external packages).
 #
-#   ./build.sh          compile + assemble build/PiWeb.app + ad-hoc sign
+#   ./build.sh          compile + assemble build/PiWeb.app + codesign
 #   ./build.sh --run    also launch the app
+#
+# Codesigning uses a stable identity when one is available so the macOS Input
+# Monitoring (TCC) grant survives rebuilds: $PI_WEB_SIGN_IDENTITY, else the
+# exact certificate name "PiWeb Local Signing", else ad-hoc (see README).
 #
 # The version shown at the bottom of the menu comes from two places, both
 # stamped here:
@@ -121,11 +125,53 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-echo "==> Ad-hoc codesign"
-if codesign --force --deep --sign - "$APP" >/dev/null 2>&1; then
-  echo "    signed (ad-hoc)"
-else
-  echo "    codesign failed; continuing (unsigned)"
+# --- codesign --------------------------------------------------------------
+# A stable signing identity keeps the Input Monitoring (TCC) grant across
+# rebuilds: macOS stores the code requirement per signature/cdhash, and an
+# ad-hoc signature changes its cdhash on every build. Resolution order:
+#   1. $PI_WEB_SIGN_IDENTITY (name or SHA-1), if set and non-empty
+#   2. an exact "PiWeb Local Signing" codesigning identity
+#   3. none -> ad-hoc fallback (today's behaviour)
+# Deliberately no --options runtime and no entitlements: the hardened runtime
+# would require WebKit/JIT entitlements and is not needed for TCC here.
+echo "==> Codesign"
+SIGN_IDENTITY="${PI_WEB_SIGN_IDENTITY:-}"
+if [[ -z "$SIGN_IDENTITY" ]]; then
+  # `|| true` keeps `set -e` happy when there are zero valid identities.
+  SIGN_IDENTITY="$(
+    security find-identity -v -p codesigning 2>/dev/null \
+      | awk -F'"' '/"PiWeb Local Signing"/ { print $2; exit }' || true
+  )"
+fi
+
+cdhash_of() {
+  # `-dv` (verbose=2) omits CDHash on recent macOS; `-dvvv` prints it.
+  codesign -dvvv "$APP" 2>&1 | awk -F'=' '/^CDHash=/ { print $2; exit }'
+}
+
+if [[ -n "$SIGN_IDENTITY" ]]; then
+  if codesign --force --deep --sign "$SIGN_IDENTITY" "$APP" >/dev/null 2>&1; then
+    echo "    signed (identity: $SIGN_IDENTITY)"
+    echo "    CDHash: $(cdhash_of)"
+  else
+    echo "!! codesign with identity '$SIGN_IDENTITY' failed; falling back to ad-hoc" >&2
+    SIGN_IDENTITY=""
+  fi
+fi
+
+if [[ -z "$SIGN_IDENTITY" ]]; then
+  if codesign --force --deep --sign - "$APP" >/dev/null 2>&1; then
+    echo "    signed (ad-hoc)"
+    echo "    CDHash: $(cdhash_of)"
+    echo "!! WARNING: ad-hoc signatures change their cdhash on every build, so macOS" >&2
+    echo "!!          drops the Input Monitoring grant and the System Settings" >&2
+    echo "!!          checkbox stops matching the new binary." >&2
+    echo "!!          Create/select a stable code-signing certificate named" >&2
+    echo "!!          'PiWeb Local Signing' (see README → 全局热键与输入监控) or set" >&2
+    echo "!!          PI_WEB_SIGN_IDENTITY, then rebuild." >&2
+  else
+    echo "    codesign failed; continuing (unsigned)"
+  fi
 fi
 
 echo "==> Built: $APP"

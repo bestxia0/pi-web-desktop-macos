@@ -51,7 +51,7 @@ build.
 | `TabStore.swift` | `TabRecord` and the `TabStore` JSON codec over `UserDefaults` (`PiWebTabs` / `PiWebTabsSelected`). Missing or corrupt data degrades to "no tabs". |
 | `TabSupport.swift` | Pure, AppKit-free tab helpers shared by `AppWindowController` and `--self-test`: `rewriteBase` (scheme/host/port swap preserving path+query), `indexAfterClose`, `neighborIndex`, `newTabURL`. |
 | `MainMenu.swift` | Builds the real `NSApp.mainMenu` (App / 编辑 / 标签页 / 浏览). The browser-style shortcuts (⌘T, ⌘W, ⌘1…9, ⌘⇧[ / ⌘⇧], ⌘[ / ⌘], ⌘R) and the nil-target Edit selectors must live here: a status-item menu's key equivalents only fire while that menu is open. |
-| `HotKeyMonitor.swift` | The right-Option global hotkey. `classify(keyCode:flags:)` is pure (right Option `61` only; left Option `58` is ignored) and `start()` prefers a listen-only `CGEvent` tap over `NSEvent` global/local monitors. Exposes the Input Monitoring / Accessibility checks and the System Settings deep link, and never consumes events. |
+| `HotKeyMonitor.swift` | The right-Option global hotkey. `classify(keyCode:flags:)` is pure (right Option `61` only; left Option `58` is ignored) and `start()` prefers a listen-only `CGEvent` tap over `NSEvent` global/local monitors. Exposes the Input Monitoring / Accessibility checks, the System Settings deep link, `tapDisabledCount` (event-tap disable events) and `resetInputMonitoringGrant()` (`tccutil reset ListenEvent`), and never consumes events. |
 | `ProcessManager.swift` | Resolves, spawns and stops the child. `start(port:spec:childPATH:)` returns the child pid; `waitForReady(url:timeout:)` polls until the URL answers; `stop()` performs the `SIGINT → 10s → SIGTERM → 5s → SIGKILL` escalation. Tracks `ownedPid` / `hasOwnedProcess`. |
 | `RunRecords.swift` | Detection. `RunRecordStore(directory:)` loads every `*.json`, and `detectLiveInstances()` classifies each record: liveness via `kill(pid, 0)` (`EPERM` counts), then ownership via `ps -ww -p <pid> -o args=`, and only then an HTTP probe of the recorded URL. Read-only: it never deletes a record. |
 | `PortPlanner.swift` | `isFree(port:)` does a `bind()` probe on `127.0.0.1`; `findFreePort(startingAt:)` scans upward (bounded); `ephemeralPort()` asks the kernel by binding to port `0`. Needed because `pi-web` has no fallback of its own. |
@@ -200,6 +200,18 @@ as a normal modifier in other apps. macOS gates this behind **Input
 Monitoring** (and, for some setups, Accessibility): the menu shows a
 "需要「输入监控」权限" helper item while the grant is missing, and a rebuild can
 reset an ad-hoc-signed app's grant.
+
+**Ad-hoc signing vs TCC.** macOS binds the Input Monitoring grant to the code
+signature. An ad-hoc signed bundle (`codesign --sign -`, the default when no
+certificate exists) gets a new `CDHash` on every build, and even moving the
+`.app` changes the identity, so TCC's stored requirement stops matching while
+the System Settings checkbox can still appear on. `build.sh` resolves a stable
+identity (`$PI_WEB_SIGN_IDENTITY` → the exact `PiWeb Local Signing` certificate
+→ ad-hoc fallback) and records the resulting `CDHash`; the ad-hoc path warns
+explicitly. `HotKeyMonitor.resetInputMonitoringGrant()` and
+`scripts/install.sh --reset-permissions` clear the stale entry so it can be
+re-granted, and the `menu build:` line reports `tapDisabled=<n>` so a tap that
+macOS keeps disabling is visible in the log.
 
 **Data sources at a glance**
 

@@ -242,6 +242,16 @@ final class MenuController: NSObject, NSMenuDelegate {
             )
             warning.target = self
             menu.addItem(warning)
+
+            // Recovery for "checkbox is on but the hotkey is dead after a
+            // rebuild/move": clear the stale TCC entry, then request again.
+            let reset = NSMenuItem(
+                title: "重置「输入监控」授权并重新请求",
+                action: #selector(resetInputMonitoringClicked),
+                keyEquivalent: ""
+            )
+            reset.target = self
+            menu.addItem(reset)
         }
 
         // The version row is the menu's last entry and is display-only.
@@ -263,6 +273,7 @@ final class MenuController: NSObject, NSMenuDelegate {
             + "stopOnQuit=\(Preferences.stopAttachedOnQuit) "
             + "hotkeyEnabled=\(Preferences.hotKeyEnabled) hotkeyMode=\(hotKey.mode.rawValue) "
             + "inputMonitoring=\(HotKeyMonitor.inputMonitoringGranted) accessibility=\(HotKeyMonitor.accessibilityGranted) "
+            + "tapDisabled=\(hotKey.tapDisabledCount) "
             + "windowVisible=\(appWindow.isVisible) "
             + "tabs=\(appWindow.tabCount) selectedTab=\(appWindow.selectedTabIndex) "
             + "version=\(VersionInfo.displayVersion) "
@@ -297,6 +308,18 @@ final class MenuController: NSObject, NSMenuDelegate {
 
     @objc private func grantInputMonitoringClicked() {
         Logger.shared.info("hotkey: requesting Input Monitoring permission")
+        HotKeyMonitor.requestInputMonitoring()
+        HotKeyMonitor.openInputMonitoringSettings()
+        hotKey.refreshIfNeeded()
+        render()
+    }
+
+    /// Clear the stale TCC entry (bound to a previous cdhash), then request the
+    /// grant again. This is the recovery path for "the checkbox is on but the
+    /// hotkey is dead after a rebuild or a move".
+    @objc private func resetInputMonitoringClicked() {
+        let status = HotKeyMonitor.resetInputMonitoringGrant()
+        Logger.shared.info("hotkey: reset Input Monitoring grant exit=\(status); requesting again")
         HotKeyMonitor.requestInputMonitoring()
         HotKeyMonitor.openInputMonitoringSettings()
         hotKey.refreshIfNeeded()

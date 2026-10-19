@@ -68,18 +68,21 @@
 ```sh
 git clone https://github.com/bestxia0/pi-web-desktop-macos.git
 cd pi-web-desktop-macos
-./build.sh                 # swiftc + 组装 build/PiWeb.app + ad-hoc 签名
+./build.sh                 # swiftc + 组装 build/PiWeb.app + 代码签名
 open build/PiWeb.app
 ```
 
 `./build.sh --run` 一步完成构建并启动。应用随后出现在菜单栏中，首次启动时会探测/附加或启动一个 `pi-web` 实例并打开界面。
+
+`build.sh` 在可用时会用稳定身份签名（`PI_WEB_SIGN_IDENTITY`，否则本地 `PiWeb Local Signing` 证书），否则回退到 ad-hoc 签名。稳定身份才能让输入监控授权在重新构建后继续有效——详见下文「全局热键与输入监控」。
 
 ## 安装到 /Applications
 
 `SMAppService.mainApp` 需要稳定的 bundle 位置，因此在启用开机自启前先把应用安装到 `/Applications`：
 
 ```sh
-./scripts/install.sh       # 构建、复制到 /Applications/PiWeb.app 并重新注册
+./scripts/install.sh                       # 构建、复制到 /Applications/PiWeb.app 并重新注册
+./scripts/install.sh --reset-permissions   # 同时清除过期的输入监控 / 辅助功能授权
 # 或等价地：
 make install
 ```
@@ -113,7 +116,8 @@ make install
 | 右侧 Option 唤起窗口 | 复选框：启用/禁用右侧 Option 全局热键。持久化于 UserDefaults 键 `PiWebHotKeyEnabled`。 | 复选框，默认**开启**。切换会立即启动/停止 `HotKeyMonitor`。 |
 | 退出 Pi Web | 停止自有子进程（开关开启时还包括所有附加实例），然后退出。快捷键 `Q`。 | 始终可用。 |
 | ⚠︎ 需要「输入监控」权限——点击授权 | 请求输入监控（`CGRequestListenEventAccess`）并打开系统设置 > 隐私与安全性 > 输入监控。 | 仅在未授予输入监控时出现，位于版本行之前。 |
-| `V<semver>-<builddate>` | 启动器版本，例如 `V0.7.0-20261019`。 | 始终存在，禁用（仅显示），最后一行。 |
+| 重置「输入监控」授权并重新请求 | 清除过期的 TCC 条目（`tccutil reset ListenEvent com.piweb.desktop`），然后再次请求授权并打开系统设置。适用于重新构建/移动后勾选仍在但热键已失效的情况。 | 紧随授权项之后，仅在未授予输入监控时出现。 |
+| `V<semver>-<builddate>` | 启动器版本，例如 `V0.7.1-20261019`。 | 始终存在，禁用（仅显示），最后一行。 |
 
 ### 状态图标
 
@@ -139,7 +143,7 @@ GUI 在**一个**原生 `NSWindow`（`AppWindowController`）中渲染 pi-web �
 
 敲击**右侧** Option 键切换窗口：若窗口可见且为 key window 则隐藏（`orderOut`），否则显示并聚焦（`NSApp.activate` + `makeKeyAndOrderFront`）。**左侧** Option 键被完全忽略，且监听器从不吞掉事件，因此右侧 Option 在其他应用中仍可作为修饰键。
 
-热键使用仅监听（listen-only）的 `CGEvent` tap，若无法创建则回退到 `NSEvent` 全局/本地监视器。macOS 需要 **输入监控** 权限（系统设置 > 隐私与安全性 > 输入监控）；未授予时菜单会显示 `⚠︎ 需要「输入监控」权限——点击授权`。由于应用是 ad-hoc 签名，重新构建可能重置该授权。可用 `右侧 Option 唤起窗口` 菜单项或 `PiWebHotKeyEnabled` 偏好全局开关该功能。
+热键使用仅监听（listen-only）的 `CGEvent` tap，若无法创建则回退到 `NSEvent` 全局/本地监视器。macOS 需要 **输入监控** 权限（系统设置 > 隐私与安全性 > 输入监控）；未授予时菜单会显示 `⚠︎ 需要「输入监控」权限——点击授权`。ad-hoc 签名每次重新构建都会改变 cdhash，因此授权可能悄无声息地失效——修复步骤见下文「全局热键与输入监控」。可用 `右侧 Option 唤起窗口` 菜单项或 `PiWebHotKeyEnabled` 偏好全局开关该功能。
 
 ### 标签页
 
@@ -281,6 +285,7 @@ bundle 图标来自 `Resources/AppIcon.jpg`，由 `build.sh` 通过 `sips` + `ic
 | `PI_WEB_DESKTOP_EXECUTABLE` | 未设置 | 显式 `pi-web` 可执行文件；优先于发现（仅次于 `PiWebExecutablePath`）。 |
 | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | 存放 `pi-web-run/` 的 agent 目录；会展开 `~`、`~/` 与 `file://`。 |
 | `PI_WEB_DESKTOP_PORT` | `30141` | 首选端口覆盖；`--port` 优先于它。 |
+| `PI_WEB_SIGN_IDENTITY` | 未设置 | 仅构建时：`build.sh` 的代码签名身份（名称或 SHA-1）；回退到 `PiWeb Local Signing` 证书，再回退到 ad-hoc。 |
 | `HOME` | 用户主目录 | `~` 展开以及日志 / 支持目录的基路径。 |
 
 GUI 启动时，应用先探测，再附加或启动，然后打开窗口；它从不启动第二个实例。双击已在运行的应用会发送 `com.piweb.desktop.activate` 分布式通知，弹出正在运行实例的菜单，因此该操作从不悄无声息。
@@ -296,11 +301,45 @@ GUI 启动时，应用先探测，再附加或启动，然后打开窗口；它�
 | 开机自启项指向仓库目录 | `.app` bundle 不在 `/Applications`，因此 `SMAppService.mainApp` 注册了仓库路径。 | 先运行 `./scripts/install.sh` 或 `make install`，再启用 `开机自启`；在此之前菜单会显示 `开机自启（App 需位于 /Applications）`。 |
 | pi-web 界面在默认浏览器而不是应用模式中打开 | 仅影响无头 `--open-url` 回退：在 `/Applications` 下未找到四个规范的 Chrome 系应用。 | 在 `/Applications` 中安装 Google Chrome、Microsoft Edge、Brave 或 Arc，或接受默认浏览器。GUI 始终使用原生窗口。 |
 
+### 全局热键与输入监控
+
+右侧 Option 热键受 macOS **输入监控** 权限控制（系统设置 > 隐私与安全性 > 输入监控）。该授权与应用的代码签名绑定，因此可能悄悄失效。
+
+**为什么会失效。** 默认构建是 ad-hoc 签名（`codesign --sign -`），**每次重新构建都会生成新的 cdhash**；移动 `.app` 同样是一次身份变化。TCC 仍保存旧构建的匹配条件，于是系统设置里的勾选可能仍然为**开**，但热键已经失效。日志中会出现 `Failed to match existing code requirement for subject com.piweb.desktop`。`build.sh` 现在会打印生成的 `CDHash`，`menu build:` 日志行也会报告 `tapDisabled=<n>`（非零表示 macOS 一直在禁用事件 tap）。
+
+**30 秒修复。** 清除过期条目，重新启动应用，再重新授权：
+
+```sh
+/usr/bin/tccutil reset ListenEvent com.piweb.desktop
+/usr/bin/tccutil reset Accessibility com.piweb.desktop   # 如果也曾授予辅助功能
+```
+
+重新启动应用，点击菜单栏的 `⚠︎ 需要「输入监控」权限——点击授权`，在输入监控中启用本应用，再把热键打开。菜单项 `重置「输入监控」授权并重新请求` 可在应用内完成同样的重置与再次请求。
+
+**一劳永逸的修复——稳定的自签名代码签名证书。** 用**钥匙串访问**创建一次：
+
+1. 钥匙串访问 → 证书助理 → 创建证书…
+2. 名称：`PiWeb Local Signing`（必须完全一致）
+3. 身份类型：自签名根证书
+4. 证书类型：代码签名
+5. 有效期：`3650` 天或更长 → 创建
+6. 打开新证书 → 显示简介 → 信任 → 将「代码签名」设为「始终信任」
+
+此后 `./build.sh` 会自动使用它：先解析 `$PI_WEB_SIGN_IDENTITY`，否则从 `security find-identity -v -p codesigning` 中匹配同名的 `PiWeb Local Signing`，并打印 `signed (identity: PiWeb Local Signing)` 与 `CDHash`。可以用 `PI_WEB_SIGN_IDENTITY`（名称或 SHA-1）覆盖为其他身份。查看可用身份：
+
+```sh
+security find-identity -v -p codesigning
+```
+
+**切换签名身份后**，需要再执行一次 TCC 重置并重新授权：旧授权仍属于之前的签名。
+
+**脚本化方式。** `./scripts/install.sh --reset-permissions` 会安装到 `/Applications`，然后执行两条 `tccutil reset`；只要安装的 bundle 是 ad-hoc 签名，它还会给出警告。
+
 ## 已知限制
 
 - **未测试：** 在此环境中未开启 `开机自启`（`SMAppService.mainApp`），因为 bundle 目前位于仓库内，注册会创建一个指向该处的登录项。菜单反映 `SMAppService` 返回的真实状态。
 - 浏览器探测只检查四个规范的 `/Applications` 路径（Chrome、Edge、Brave、Arc）；非标准安装位置会回退到默认浏览器。这仅影响无头的 `--open-url` 标志——GUI 使用原生窗口。
-- 右侧 Option 全局热键需要在系统设置 > 隐私与安全性中授予 **输入监控**（event-tap 路径可能还需要辅助功能）权限；未授予时菜单会显示辅助项。应用为 ad-hoc 签名，重新构建可能重置该授权。
+- 右侧 Option 全局热键需要在系统设置 > 隐私与安全性中授予 **输入监控**（event-tap 路径可能还需要辅助功能）权限；未授予时菜单会显示辅助项。ad-hoc 签名每次重新构建都会改变 cdhash，因此授权可能悄无声息地失效——详见上文「全局热键与输入监控」。
 - 探测是只读的，且从不清理过期记录（有意为之）。注意*附加*停止路径会调用 `pi-web stop`，上游会在该命令中清理过期记录。
 - 本壳仅在内存中跟踪归属；本壳崩溃后，它先前启动的实例在重启后会变成附加实例（仍可停止，此时通过 `pi-web stop`）。
 - `--stop-port`、`--test-cycle`、`--test-fallback` 与 `--test-quit` 用于验证，不属于正常菜单流程。
@@ -343,7 +382,7 @@ pi-web-desktop-macos/
 │   ├── verify.sh               无头验证套件（make verify）
 │   └── capture-screenshots.sh  重新生成 docs/images 截图
 ├── .github/                    CI 工作流（ci.yml）与 issue 模板
-├── build.sh                    swiftc 构建、.app 组装与 ad-hoc 签名
+├── build.sh                    swiftc 构建、.app 组装与代码签名（稳定身份，ad-hoc 回退）
 ├── Makefile                    help / build / run / install / uninstall / verify / clean / version / log
 ├── VERSION                     写入 Info.plist 的语义化版本
 ├── CHANGELOG.md                发布历史
@@ -358,7 +397,7 @@ pi-web-desktop-macos/
 ## 开发
 
 ```sh
-./build.sh              # 编译 + 组装 build/PiWeb.app + ad-hoc 签名
+./build.sh              # 编译 + 组装 build/PiWeb.app + 代码签名
 ./build.sh --run        # 构建并启动
 make verify             # 运行无头验证套件（scripts/verify.sh）
 ./scripts/verify.sh     # 直接运行同一套件

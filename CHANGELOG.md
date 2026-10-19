@@ -5,13 +5,49 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-The version shown in the menu is `<semver>-<builddate>`, e.g. `V0.7.0-20261019`.
+The version shown in the menu is `<semver>-<builddate>`, e.g. `V0.7.1-20261019`.
 The semantic part comes from the [`VERSION`](VERSION) file; the build date is
 stamped by `build.sh` at build time.
 
 ## [Unreleased]
 
 Nothing yet.
+
+## [0.7.1] - 2026-10-19
+
+Stable signing identity so the Input Monitoring grant survives rebuilds, plus
+in-app and scripted recovery for a stale TCC entry.
+
+### Added
+
+- **Stable signing identity resolution** in `build.sh`: `$PI_WEB_SIGN_IDENTITY`
+  first, then an exact `PiWeb Local Signing` codesigning identity from
+  `security find-identity -v -p codesigning`, else the existing ad-hoc fallback.
+  The build now logs the identity and the resulting `CDHash`, and the ad-hoc
+  path warns that the grant will be dropped on the next build.
+- **`scripts/install.sh --reset-permissions`** — after installing and
+  re-registering, runs `tccutil reset ListenEvent` and
+  `tccutil reset Accessibility` for `com.piweb.desktop`; independently warns
+  whenever the installed bundle is ad-hoc signed.
+- **In-app recovery** — a `重置「输入监控」授权并重新请求` menu item (shown while
+  Input Monitoring is missing) clears the stale TCC entry and re-requests the
+  grant. `HotKeyMonitor.resetInputMonitoringGrant()` runs the synchronous
+  `tccutil reset ListenEvent <bundle id>` and logs the exit status.
+- **Hotkey diagnostics** — `HotKeyMonitor.tapDisabledCount` counts event-tap
+  disable events; the `menu build:` log line reports `tapDisabled=<n>`.
+- **Docs** — a “全局热键与输入监控” section in both READMEs: why the grant breaks,
+  the `tccutil reset` fix, the one-time `PiWeb Local Signing` certificate
+  walkthrough, and the scripted variant.
+
+### Fixed
+
+- The right-Option hotkey dying after a rebuild or a move of the `.app` while
+  the System Settings checkbox still shows the grant as enabled.
+
+### Changed
+
+- `build.sh` keeps the ad-hoc path as a fallback so a machine without a
+  certificate still builds; no hardened runtime and no entitlements are added.
 
 ## [0.7.0] - 2026-10-19
 
@@ -163,7 +199,8 @@ First public release: the menu bar launcher for the upstream `pi-web` web UI.
 - The build is ad-hoc signed, not notarised, so a downloaded copy needs
   Gatekeeper approval on first launch.
 
-[Unreleased]: https://github.com/bestxia0/pi-web-desktop-macos/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/bestxia0/pi-web-desktop-macos/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.7.1
 [0.7.0]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.7.0
 [0.6.0]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.6.0
 [0.5.0]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.5.0

@@ -62,18 +62,25 @@ No SPM, no CocoaPods, no third-party packages. The app compiles with `swiftc` al
 ```sh
 git clone https://github.com/bestxia0/pi-web-desktop-macos.git
 cd pi-web-desktop-macos
-./build.sh                 # swiftc + assemble build/PiWeb.app + ad-hoc sign
+./build.sh                 # swiftc + assemble build/PiWeb.app + codesign
 open build/PiWeb.app
 ```
 
 `./build.sh --run` builds and launches in one step. The app then appears in the menu bar and, on first launch, detects/attaches or starts a `pi-web` instance and opens the UI.
+
+`build.sh` signs with a stable identity when one is available
+(`PI_WEB_SIGN_IDENTITY`, else a local `PiWeb Local Signing` certificate) and
+falls back to ad-hoc signing. A stable identity is what keeps the Input
+Monitoring grant across rebuilds — see **Global hotkey and Input Monitoring**
+below.
 
 ## Installation to /Applications
 
 `SMAppService.mainApp` needs a stable bundle location, so install the app to `/Applications` before enabling Start at Login:
 
 ```sh
-./scripts/install.sh       # build, copy to /Applications/PiWeb.app, re-register
+./scripts/install.sh                       # build, copy to /Applications/PiWeb.app, re-register
+./scripts/install.sh --reset-permissions   # also clear stale Input Monitoring / Accessibility grants
 # or, equivalently:
 make install
 ```
@@ -107,7 +114,8 @@ Menu items are shown in Simplified Chinese. The table below lists them top to bo
 | 右侧 Option 唤起窗口 | Checkbox: enables/disables the right-Option global hotkey. Persisted in UserDefaults key `PiWebHotKeyEnabled`. | Checkbox, default **on**. Toggling immediately starts/stops `HotKeyMonitor`. |
 | 退出 Pi Web | Stops the owned child (and, when the toggle is on, every attached instance), then quits. Key equivalent `Q`. | Always enabled. |
 | ⚠︎ 需要「输入监控」权限——点击授权 | Requests Input Monitoring (`CGRequestListenEventAccess`) and opens System Settings > Privacy & Security > Input Monitoring. | Appears only while Input Monitoring is not granted, just before the version row. |
-| `V<semver>-<builddate>` | The launcher version, e.g. `V0.7.0-20261019`. | Always present, disabled (display only), last row. |
+| 重置「输入监控」授权并重新请求 | Clears the stale TCC entry (`tccutil reset ListenEvent com.piweb.desktop`), then requests the grant and opens System Settings. Use it when the checkbox is on but the hotkey is dead after a rebuild or a move. | Appears immediately after the warning item, only while Input Monitoring is not granted. |
+| `V<semver>-<builddate>` | The launcher version, e.g. `V0.7.1-20261019`. | Always present, disabled (display only), last row. |
 
 ### Status icon
 
@@ -148,9 +156,10 @@ The hotkey uses a listen-only `CGEvent` tap and falls back to `NSEvent`
 global/local monitors if the tap cannot be created. macOS gates it behind
 **Input Monitoring** (System Settings > Privacy & Security > Input Monitoring);
 while the grant is missing the menu shows a `⚠︎ 需要「输入监控」权限——点击授权`
-item. Because the app is ad-hoc signed, a rebuild can reset the grant. Toggle
-the whole feature with the `右侧 Option 唤起窗口` menu item or the
-`PiWebHotKeyEnabled` preference.
+item. An ad-hoc signature changes its cdhash on every rebuild, so the grant can
+silently stop matching — see **Global hotkey and Input Monitoring** below for the
+30-second and permanent fixes. Toggle the whole feature with the
+`右侧 Option 唤起窗口` menu item or the `PiWebHotKeyEnabled` preference.
 
 ### Tabs (标签页)
 
@@ -310,6 +319,7 @@ Because a GUI launch does not inherit a login shell, the app asks the login shel
 | `PI_WEB_DESKTOP_EXECUTABLE` | unset | Explicit `pi-web` executable; wins over discovery (after `PiWebExecutablePath`). |
 | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | Agent directory holding `pi-web-run/`; `~`, `~/` and `file://` are expanded. |
 | `PI_WEB_DESKTOP_PORT` | `30141` | Preferred port override; `--port` wins over this. |
+| `PI_WEB_SIGN_IDENTITY` | unset | Build-time only: codesigning identity (name or SHA-1) for `build.sh`; falls back to the `PiWeb Local Signing` certificate, then ad-hoc. |
 | `HOME` | user home | Base for `~` expansion and the log / support directories. |
 
 On a GUI launch the app detects first, then attaches or starts, and opens the window; it never starts a second instance. Double-clicking an already-running app posts a `com.piweb.desktop.activate` distributed notification that pops the running instance's menu, so the action is never silent.
@@ -325,11 +335,64 @@ On a GUI launch the app detects first, then attaches or starts, and opens the wi
 | The Start at Login item points into the repository | The `.app` bundle is not in `/Applications`, so `SMAppService.mainApp` registers the repo path. | Run `./scripts/install.sh` or `make install` first, then enable `开机自启`; the menu shows `开机自启（App 需位于 /Applications）` until then. |
 | The pi-web UI opens in the default browser instead of app mode | Only affects the headless `--open-url` fallback: none of the four canonical Chrome-family apps were found under `/Applications`. | Install Google Chrome, Microsoft Edge, Brave or Arc in `/Applications`, or accept the default browser. The GUI always uses the native window. |
 
+### Global hotkey and Input Monitoring (全局热键与输入监控)
+
+The right-Option hotkey is gated by macOS **Input Monitoring** (System Settings
+> Privacy & Security > Input Monitoring). The grant is tied to the app's code
+signature, which is why it can silently stop working.
+
+**Why it breaks.** The default build is ad-hoc signed (`codesign --sign -`),
+which produces a **new cdhash on every rebuild**; moving the `.app` is another
+identity change. TCC still stores the old build's requirement, so the System
+Settings checkbox can stay **on** while the hotkey is dead. The log shows
+`Failed to match existing code requirement for subject com.piweb.desktop`.
+`build.sh` prints the resulting `CDHash`, and the `menu build:` log line reports
+`tapDisabled=<n>` — a nonzero count means macOS has been disabling the event
+tap.
+
+**The 30-second fix.** Clear the stale entry, relaunch, then re-grant:
+
+```sh
+/usr/bin/tccutil reset ListenEvent com.piweb.desktop
+/usr/bin/tccutil reset Accessibility com.piweb.desktop   # if you also granted it
+```
+
+Relaunch the app, click the menu bar's `⚠︎ 需要「输入监控」权限——点击授权`, enable the
+app under Input Monitoring, and switch the hotkey back on. The
+`重置「输入监控」授权并重新请求` menu item performs this reset and re-request in-app.
+
+**The permanent fix — a stable self-signed code-signing certificate.** Create it
+once in **Keychain Access** (钥匙串访问):
+
+1. 钥匙串访问 → 证书助理 → 创建证书…
+2. 名称: `PiWeb Local Signing` (exactly this name)
+3. 身份类型: 自签名根证书
+4. 证书类型: 代码签名
+5. 有效期: `3650` days or more → 创建
+6. Open the new certificate → 显示简介 → 信任 → set 「代码签名」 to 「始终信任」
+
+Then `./build.sh` picks it up automatically: it resolves `$PI_WEB_SIGN_IDENTITY`
+first, else the exact `PiWeb Local Signing` identity from
+`security find-identity -v -p codesigning`, and logs `signed (identity: PiWeb
+Local Signing)` plus the `CDHash`. Set `PI_WEB_SIGN_IDENTITY` to any other
+identity (name or SHA-1) to override. Verify what is available:
+
+```sh
+security find-identity -v -p codesigning
+```
+
+**After switching identity**, reset the TCC entry once more and re-grant: the
+existing grant still belongs to the previous signature.
+
+**Scriptable variant.** `./scripts/install.sh --reset-permissions` installs to
+`/Applications` and then runs both `tccutil reset` commands. It also warns
+whenever the installed bundle is ad-hoc signed.
+
 ## Known limitations
 
 - **Not tested:** `Start at Login` (`SMAppService.mainApp`) was not switched on in this environment, because the bundle currently lives in the repository and registering would create a login item pointing there. The menu reflects the real status returned by `SMAppService`.
 - Browser detection only checks the four canonical `/Applications` paths (Chrome, Edge, Brave, Arc); a non-standard install location falls back to the default browser. This only affects the headless `--open-url` flag — the GUI uses its native window.
-- The right-Option global hotkey needs **Input Monitoring** (and, for the event-tap path, possibly Accessibility) to be granted in System Settings > Privacy & Security; the menu shows a helper item while the grant is missing. The app is ad-hoc signed, so a rebuild can reset the grant.
+- The right-Option global hotkey needs **Input Monitoring** (and, for the event-tap path, possibly Accessibility) to be granted in System Settings > Privacy & Security; the menu shows a helper item while the grant is missing. Ad-hoc signing changes the cdhash on every rebuild, so the grant can silently stop matching — see **Global hotkey and Input Monitoring** above.
 - Detection is read-only and never prunes stale records (by design). Note that the *attached* stop path invokes `pi-web stop`, and upstream prunes stale records as part of that command.
 - The shell tracks ownership in memory only; after a shell crash, an instance it previously started becomes an attached instance on restart (still stoppable, now via `pi-web stop`).
 - `--stop-port`, `--test-cycle`, `--test-fallback` and `--test-quit` are for verification and are not part of the normal menu flow.
@@ -372,7 +435,7 @@ pi-web-desktop-macos/
 │   ├── verify.sh               Headless verification suite (make verify)
 │   └── capture-screenshots.sh  Regenerate the docs/images screenshots
 ├── .github/                    CI workflow (ci.yml) and issue templates
-├── build.sh                    swiftc build, .app assembly and ad-hoc codesign
+├── build.sh                    swiftc build, .app assembly and codesign (stable identity, ad-hoc fallback)
 ├── Makefile                    help / build / run / install / uninstall / verify / clean / version / log
 ├── VERSION                     Semantic version stamped into Info.plist
 ├── CHANGELOG.md                Release history
@@ -387,7 +450,7 @@ pi-web-desktop-macos/
 ## Development
 
 ```sh
-./build.sh              # compile + assemble build/PiWeb.app + ad-hoc sign
+./build.sh              # compile + assemble build/PiWeb.app + codesign
 ./build.sh --run        # build and launch
 make verify             # run the headless verification suite (scripts/verify.sh)
 ./scripts/verify.sh     # the same suite, directly
