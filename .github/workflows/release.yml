@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# GITHUB_TOKEN needs contents:write to create the release.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Package and publish
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build app bundle
+        run: ./build.sh
+
+      - name: Read version
+        id: version
+        run: echo "value=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Package app bundle
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/PiWeb.app "PiWeb-${{ steps.version.outputs.value }}.zip"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "PiWeb-${{ steps.version.outputs.value }}.zip" \
+            --title "PiWeb ${{ steps.version.outputs.value }}" \
+            --generate-notes

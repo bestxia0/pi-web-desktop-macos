@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref so a busy branch does not queue up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and verify
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          swiftc --version
+          sw_vers
+
+      - name: Build app bundle
+        run: ./build.sh
+
+      # The suite is deliberately environment-agnostic: assertions that need a
+      # locally installed `pi-web` or `node` are scoped to the branch the
+      # machine can exercise, so a clean runner needs no shims and no network.
+      - name: Self-test
+        run: build/PiWeb.app/Contents/MacOS/PiWeb --self-test
+
+      - name: Log path
+        run: build/PiWeb.app/Contents/MacOS/PiWeb --log-path
+
+      - name: Version
+        run: build/PiWeb.app/Contents/MacOS/PiWeb --version
+
+      - name: Upload app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiWeb.app
+          path: build/PiWeb.app
+          if-no-files-found: error
+          retention-days: 14

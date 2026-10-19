@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Troubleshooting and FAQ
+    url: https://github.com/bestxia0/pi-web-desktop-macos/blob/main/README.md#troubleshooting
+    about: Check the README troubleshooting section before opening an issue.
+  - name: Questions and general discussion
+    url: https://github.com/bestxia0/pi-web-desktop-macos/discussions
+    about: Ask usage questions or share setups in GitHub Discussions.

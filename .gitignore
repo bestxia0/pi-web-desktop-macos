@@ -1,0 +1,29 @@
+# --- Build output ---------------------------------------------------------
+build/
+DerivedData/
+.build/
+*.o
+*.dSYM/
+
+# --- macOS -----------------------------------------------------------------
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# --- Logs and temporary files ---------------------------------------------
+*.log
+*.tmp
+*.swp
+
+# --- Xcode / Swift package manager ----------------------------------------
+*.xcuserstate
+*.xcodeproj
+*.xcworkspace
+.swiftpm/
+Package.resolved
+
+# --- Editors / IDEs --------------------------------------------------------
+.vscode/
+.idea/
+*.iml

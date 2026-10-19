@@ -1,0 +1,89 @@
+name: Bug report
+description: Report a problem with the Pi Web macOS menu bar launcher.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill in as much
+        detail as you can — the launcher writes a log that makes most problems
+        diagnosable, and the exact versions matter.
+  - type: checkboxes
+    id: search
+    attributes:
+      label: Before you file
+      description: Please confirm the following.
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      description: The output of `sw_vers -productVersion` (for example `14.6.1`).
+      placeholder: "14.6.1"
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Pi Web app version
+      description: The output of `build/PiWeb.app/Contents/MacOS/PiWeb --version` (starts with a `V`).
+      placeholder: "V0.5.0-20261019"
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Installation method
+      description: How did you get the app onto this Mac?
+      options:
+        - Built from source (./build.sh)
+        - Installed to /Applications (scripts/install.sh)
+        - Other (describe below)
+    validations:
+      required: true
+  - type: input
+    id: piweb-version
+    attributes:
+      label: pi-web version
+      description: The version reported by your installed `pi-web` command, if any.
+      placeholder: "0.12.1"
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the actual behaviour, including any error shown in the menu.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      description: Describe the behaviour you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps that reliably trigger the problem.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log tail
+      description: |
+        Paste the tail of `~/Library/Logs/PiWeb/pi-web.log` (run
+        `tail -n 100 ~/Library/Logs/PiWeb/pi-web.log`). Remove anything private first.
+      render: shell
+    validations:
+      required: false
