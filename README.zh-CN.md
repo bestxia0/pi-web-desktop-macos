@@ -48,8 +48,6 @@
 
 ![Pi Web Desktop 菜单栏图标](docs/images/menubar-icon.png)
 *菜单栏图标：SF Symbol 加 `Pi` 标题，按启动器状态着色。*
-
-![展开的菜单，所有条目可见](docs/images/menu-open.png)
 *完整菜单：打开、启动、停止、刷新、日志、开机自启、退出行为以及版本行。*
 
 
