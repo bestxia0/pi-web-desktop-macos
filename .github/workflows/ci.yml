@@ -21,7 +21,7 @@ jobs:
     runs-on: macos-14
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Toolchain
         run: |
@@ -44,7 +44,7 @@ jobs:
         run: build/PiWeb.app/Contents/MacOS/PiWeb --version
 
       - name: Upload app bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: PiWeb.app
           path: build/PiWeb.app
