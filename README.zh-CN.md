@@ -11,7 +11,15 @@
 [![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](#requirements)
 [![Latest release](https://img.shields.io/github/v/release/bestxia0/pi-web-desktop-macos?display_name=tag)](https://github.com/bestxia0/pi-web-desktop-macos/releases)
 
-![Pi Web Desktop 在 macOS 菜单栏中展开的菜单](docs/images/menu-open.png)
+
+
+<img src="./docs/images/image-20261019134737277.png" alt="image-20261019134737277" style="zoom:50%;" />
+
+控制台界面：
+
+<img src="./docs/images/docks.png" alt="image-20261019134508745｜400" style="zoom:50%;" />
+
+
 
 ## 是什么 / 不是什么
 
@@ -23,6 +31,10 @@
 | 一个**零依赖**、仅由 `swiftc` 构建的应用 | 不依赖 SPM、CocoaPods 或任何第三方包 |
 
 > **运行时依赖：** 全局安装的 `pi-web` CLI 以及 `node`。本应用仅是启动器——它不内嵌 webview，也不打包 Node。
+
+
+
+
 
 ## 功能特性
 
@@ -49,8 +61,8 @@
 ![Pi Web Desktop 应用图标](docs/images/app-icon.png)
 *Finder / 启动台中的应用图标，构建时由 `Resources/AppIcon.jpg` 生成。*
 
-![本地运行的 pi-web Web UI](docs/images/piweb-ui.png)
-*在浏览器应用模式下打开的 `pi-web` 界面。*
+![本地运行的 pi-web 控制台界面](docs/images/image-20261019134737277.png)
+*在浏览器应用模式下打开的 `pi-web` 控制台界面。*
 
 ## 环境要求
 
