@@ -11,11 +11,6 @@ A tiny native macOS menu bar launcher for the **pi-web** web UI: it detects, reu
 [![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](#requirements)
 [![Latest release](https://img.shields.io/github/v/release/bestxia0/pi-web-desktop-macos?display_name=tag)](https://github.com/bestxia0/pi-web-desktop-macos/releases)
 
-<img src="./docs/images/image-20261019134737277.png" alt="The pi-web console UI opened by Pi Web Desktop" style="zoom:50%;" />
-
-Console UI:
-
-<img src="./docs/images/docks.png" alt="The Pi Web Desktop menu open in the macOS menu bar" style="zoom:50%;" />
 
 ## What it is / What it is not
 
@@ -47,11 +42,8 @@ Console UI:
 ![Pi Web Desktop menu bar icon](docs/images/menubar-icon.png)
 *The menu bar icon: an SF Symbol plus the `Pi` title, tinted by launcher state.*
 
-![The menu open with all items visible](docs/images/menu-open.png)
+![The menu open with all items visible](docs/images/docks.png)
 *The full menu: open, start, stop, refresh, logs, Start at Login, quit behaviour and the version row.*
-
-![The Pi Web Desktop application icon](docs/images/app-icon.png)
-*The app icon in Finder / Launchpad, generated at build time from `Resources/AppIcon.jpg`.*
 
 ![The pi-web console UI running locally](docs/images/image-20261019134737277.png)
 *The `pi-web` console UI opened in the browser's app mode.*
