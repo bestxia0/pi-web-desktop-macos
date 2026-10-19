@@ -30,6 +30,9 @@ final class StatusController {
     private(set) var liveInstances: [DetectedInstance] = []
 
     var onChange: (() -> Void)?
+    /// Installed by the GUI: presents the active URL in the single native
+    /// window. When nil, `openWindow()` falls back to `BrowserOpener`.
+    var openWindowHandler: ((String) -> Void)?
     var primaryInstance: DetectedInstance? { liveInstances.first }
 
     let runDir: String
@@ -259,12 +262,22 @@ final class StatusController {
 
     // MARK: - Open
 
+    /// Opens the active URL in the native window when the GUI installed a
+    /// handler, otherwise through Chrome-family app mode. Returns whether the
+    /// open succeeded.
     @discardableResult
-    func openWindow() -> BrowserOpener.Result {
-        guard let url = activeURL else {
-            return .failed("没有可打开的实例")
+    func openWindow() -> Bool {
+        guard let url = activeURL else { return false }
+        if let handler = openWindowHandler {
+            handler(url)
+            return true
         }
-        return BrowserOpener.openAppMode(url: url)
+        switch BrowserOpener.openAppMode(url: url) {
+        case .appMode, .defaultBrowser:
+            return true
+        case .failed:
+            return false
+        }
     }
 
     // MARK: - Quit

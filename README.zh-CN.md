@@ -19,12 +19,12 @@
 
 | 是什么 | 不是什么 |
 | --- | --- |
-| 一个原生的 Swift + AppKit `NSStatusItem` 菜单栏应用（`LSUIElement`，无 Dock 图标） | 不是 webview 或 Electron 外壳——不内嵌任何浏览器引擎 |
+| 一个原生的 Swift + AppKit `NSStatusItem` 菜单栏应用（`LSUIElement`，无 Dock 图标） | 不是浏览器或 Electron 外壳——它拥有自己的单个原生 `WKWebView` 窗口，而不是内嵌整个浏览器引擎 |
 | 一个**纯启动器**：为你查找、启动并停止 `pi-web` CLI | 不是打包器——从不附带 Node、npm 或 `pi-web` 包 |
 | 本地 `127.0.0.1` 上上游 `pi-web` 服务的前端 | 不是 `pi-web` 的替代品；CLI 与 `node` 必须已安装 |
 | 一个**零依赖**、仅由 `swiftc` 构建的应用 | 不依赖 SPM、CocoaPods 或任何第三方包 |
 
-> **运行时依赖：** 全局安装的 `pi-web` CLI 以及 `node`。本应用仅是启动器——它不内嵌 webview，也不打包 Node。
+> **运行时依赖：** 全局安装的 `pi-web` CLI 以及 `node`。本应用在自有的单个原生 `WKWebView` 窗口中呈现界面（每次打开都复用），不打包浏览器引擎，也不打包 Node。
 
 
 
@@ -35,7 +35,8 @@
 - **原生菜单栏** —— 单个 `NSStatusItem`，使用 SF Symbol 加简短的 `Pi` 标题，按状态着色（运行绿色 / 忙碌橙色 / 失败红色），且没有 Dock 图标。
 - **先探测，再复用** —— 每次启动都执行与 `pi-web` 相同的运行记录契约，附加到健康的既有实例，而不是再启动一个。
 - **按需启动** —— 在空闲端口上启动 `pi-web --port <N> --no-open`，等待 URL 响应（最长 60 秒），然后打开界面。
-- **浏览器应用模式** —— 以 Chrome 系浏览器的应用模式（无地址栏）打开界面，失败时回退到默认浏览器。
+- **原生单窗口** —— 界面渲染在一个可复用的 `WKWebView` 窗口中；再次打开只聚焦该窗口而不再新建，关闭窗口只是隐藏而非销毁。
+- **右侧 Option 全局热键** —— 敲击**右侧** Option 键即可切换窗口（在前台可见时隐藏，否则显示并聚焦）。左侧 Option 键绝不触发任何动作，且右侧 Option 在其他应用中仍可作为普通修饰键使用。
 - **两种停止路径** —— 由本壳启动的实例走 `SIGINT → SIGTERM → SIGKILL` 升级；附加实例在确认提示后通过上游 `pi-web stop --port N` 停止。
 - **端口回退** —— 用 `bind()` 探测 `30141`，从 `30151` 向上扫描，最后回退到内核分配的临时端口，因为 `pi-web` 本身没有回退。
 - **适配 Finder 的 PATH 解析** —— 一次性恢复登录 shell 的 `PATH` 与 `pi-web` 位置，使 GUI 启动也能找到 Homebrew 的 `pi-web` 与 `node`。
@@ -52,7 +53,7 @@
 
 
 ![本地运行的 pi-web 控制台界面](docs/images/image-20261019134737277.png)
-*在浏览器应用模式下打开的 `pi-web` 控制台界面。*
+*在应用自有的原生 `WKWebView` 窗口中渲染的 `pi-web` 控制台界面。*
 
 ## 环境要求
 
@@ -60,7 +61,7 @@
 - **Xcode Command Line Tools**，提供 `swiftc` —— 唯一需要的构建工具。
 - 要真正启动服务：`PATH` 上需有**全局安装的 `pi-web` CLI** 与 **`node`**。
 
-无 SPM、无 CocoaPods、无第三方包。应用仅用 `swiftc` 对接系统框架（Foundation、AppKit、ServiceManagement、UniformTypeIdentifiers）编译。
+无 SPM、无 CocoaPods、无第三方包。应用仅用 `swiftc` 对接系统框架（Foundation、AppKit、WebKit、CoreGraphics、ApplicationServices、ServiceManagement、UniformTypeIdentifiers）编译。
 
 ## 快速开始
 
@@ -95,7 +96,8 @@ make install
 | --- | --- | --- |
 | `Pi Web — <detail>` | 菜单顶部的状态标题；显示当前阶段、活动 URL/版本或实例数量。 | 始终存在，禁用（仅显示）。 |
 | `错误：<message>` | 展示最近一次失败（换行会压成一行）。 | 仅在存在错误时出现。 |
-| 打开 Pi Web | 在 Chrome/Edge/Brave/Arc 应用模式窗口（无地址栏）中打开活动 URL，否则用默认浏览器。快捷键 `O`。 | 仅在已知活动实例 URL 时可用。 |
+| 打开 Pi Web | 在应用自己的单个原生窗口中显示活动 URL（必要时创建窗口）。仅当 URL 自上次加载后发生变化时才重新加载。快捷键 `O`。 | 仅在已知活动实例 URL 时可用。 |
+| 显示 / 隐藏窗口 | 切换单个原生窗口：前台可见时隐藏，否则显示并聚焦。 | 在已知活动实例 URL 或窗口已存在时可用。 |
 | 启动 Pi Web | 先探测；附加到既有实例，否则在空闲端口以 `--no-open` 启动一个并打开。快捷键 `S`。 | 仅在启动器已停止或失败时可用。 |
 | 停止 Pi Web | 停止实例。自有 → `SIGINT → 10s → SIGTERM → 5s → SIGKILL`；附加 → 确认提示后执行上游 `pi-web stop --port N`。 | 恰好有一个活动实例时可用。有多个时变为 `停止 Pi Web（N 个实例）` 并带逐实例子菜单（自有项显示 `<url>  pid <pid>（本壳）`）。 |
 | 刷新状态 | 重新执行探测并重建菜单。快捷键 `R`。 | 始终可用。 |
@@ -103,8 +105,10 @@ make install
 | 在 Finder 中显示日志 | 在 Finder 中显示日志文件。 | 始终可用。 |
 | 开机自启 | 通过 `SMAppService.mainApp` 注册/注销登录项。 | 复选框反映真实状态；需要批准时标题为 `开机自启（需在系统设置中批准）`，bundle 未安装时为 `开机自启（App 需位于 /Applications）`；不支持时以 `开机自启不可用：<reason>` 显示并禁用。 |
 | 退出时同时停止后台 pi-web | 切换退出时是否同时停止附加实例。持久化于 UserDefaults 键 `PiWebStopAttachedOnQuit`。 | 复选框，默认**开启**。始终可用。 |
+| 右侧 Option 唤起窗口 | 复选框：启用/禁用右侧 Option 全局热键。持久化于 UserDefaults 键 `PiWebHotKeyEnabled`。 | 复选框，默认**开启**。切换会立即启动/停止 `HotKeyMonitor`。 |
 | 退出 Pi Web | 停止自有子进程（开关开启时还包括所有附加实例），然后退出。快捷键 `Q`。 | 始终可用。 |
-| `V<semver>-<builddate>` | 启动器版本，例如 `V0.5.0-20261019`。 | 始终存在，禁用（仅显示），最后一行。 |
+| ⚠︎ 需要「输入监控」权限——点击授权 | 请求输入监控（`CGRequestListenEventAccess`）并打开系统设置 > 隐私与安全性 > 输入监控。 | 仅在未授予输入监控时出现，位于版本行之前。 |
+| `V<semver>-<builddate>` | 启动器版本，例如 `V0.6.0-20261019`。 | 始终存在，禁用（仅显示），最后一行。 |
 
 ### 状态图标
 
@@ -116,6 +120,18 @@ make install
 | 启动 / 停止中（忙碌） | `arrow.triangle.2.circlepath` | 橙色 |
 | 已停止 | `power.circle.fill` | 标签色 |
 | 失败 | `exclamationmark.triangle.fill` | 红色 |
+
+### 原生窗口与右侧 Option 热键
+
+GUI 在**一个**原生 `NSWindow` + `WKWebView`（`AppWindowController`）中渲染 pi-web 界面，首次使用时创建，之后复用：
+
+- 重复点击 `打开 Pi Web` / 按热键只会聚焦窗口。仅当请求的 URL 与上次加载的不同时才重新加载 WebView。
+- 关闭窗口（红点 / Cmd+W）只是隐藏，从不销毁；因此再次打开是瞬时的，并保留滚动与前进/后退状态。
+- host 不是 `127.0.0.1`/`localhost` 的链接会在系统浏览器中打开。
+
+敲击**右侧** Option 键切换窗口：若窗口可见且为 key window 则隐藏（`orderOut`），否则显示并聚焦（`NSApp.activate` + `makeKeyAndOrderFront`）。**左侧** Option 键被完全忽略，且监听器从不吞掉事件，因此右侧 Option 在其他应用中仍可作为修饰键。
+
+热键使用仅监听（listen-only）的 `CGEvent` tap，若无法创建则回退到 `NSEvent` 全局/本地监视器。macOS 需要 **输入监控** 权限（系统设置 > 隐私与安全性 > 输入监控）；未授予时菜单会显示 `⚠︎ 需要「输入监控」权限——点击授权`。由于应用是 ad-hoc 签名，重新构建可能重置该授权。可用 `右侧 Option 唤起窗口` 菜单项或 `PiWebHotKeyEnabled` 偏好全局开关该功能。
 
 ## 无头与验证标志
 
@@ -150,7 +166,7 @@ $BIN --log-path                                 # 打印日志文件路径
 | `--probe` | 打印每条运行记录及其第 2/3 步分类，以及附加/启动决策。 | 只读；从不删除记录。仅用于验证。 |
 | `--test-cycle [--occupy] [--gui-path]` | 针对一次性实例执行完整的启动 → 就绪 → 停止循环。 | `--occupy` 预先占用首选端口以演练回退；`--gui-path` 强制使用系统默认 PATH。仅用于验证。 |
 | `--test-fallback` | 占用首选端口并报告规划器会选择的回退端口。 | 仅用于验证。 |
-| `--open-url <url>` | 以应用模式或默认浏览器打开 URL，并打印所用命令。 | —— |
+| `--open-url <url>` | 通过 `BrowserOpener` 打开 URL（Chrome 系应用模式，否则默认浏览器），并打印所用命令。 | 仅无头回退；GUI 使用原生窗口。 |
 | `--resolve [--gui-path]` | 打印解析出的 `pi-web`、其来源、子进程 PATH、`node`、运行目录与浏览器计划。 | `--gui-path` 绕过所有缓存并强制探测。 |
 | `--stop-port <n>` | 通过上游 `pi-web stop --port n` 停止一个实例，并打印停止前后的探测结果。 | 仅用于验证。 |
 | `--test-quit [--keep-attached]` | 演练 `stopForQuit`，范围限定为 `--port`。 | `--keep-attached` 模拟开关关闭。仅用于验证。 |
@@ -208,13 +224,13 @@ bundle 图标来自 `Resources/AppIcon.jpg`，由 `build.sh` 通过 `sips` + `ic
 
 ## 版本
 
-`V0.5.0-20261019` 作为菜单最后一行显示在 `退出 Pi Web` 下方，是禁用且仅用于显示的条目。它来自唯一一处：
+`V0.6.0-20261019` 作为菜单最后一行显示在 `退出 Pi Web` 下方，是禁用且仅用于显示的条目。它来自唯一一处：
 
 | 来源 | 值 | 写入 Info.plist 为 |
 | --- | --- | --- |
-| `VERSION` 文件 | `0.5.0` | `CFBundleShortVersionString` |
+| `VERSION` 文件 | `0.6.0` | `CFBundleShortVersionString` |
 | 构建时的 `date +%Y%m%d` | `20261019` | `CFBundleVersion` |
-| 两者拼接 | `0.5.0-20261019` | `PiWebVersion` |
+| 两者拼接 | `0.6.0-20261019` | `PiWebVersion` |
 
 因此升级版本就是：编辑 `VERSION`，运行 `./build.sh`。Swift 中没有任何硬编码，日期也从不手工维护。
 
@@ -229,6 +245,7 @@ bundle 图标来自 `Resources/AppIcon.jpg`，由 `build.sh` 通过 `sips` + `ic
 | 键 | 类型 | 默认值 | 作用 |
 | --- | --- | --- | --- |
 | `PiWebStopAttachedOnQuit` | Bool | `true` | `退出 Pi Web` 是否也停止附加实例。可在菜单中切换。 |
+| `PiWebHotKeyEnabled` | Bool | `true` | 右侧 Option 全局热键是否启用。由 `右侧 Option 唤起窗口` 菜单项切换。 |
 | `PiWebExecutablePath` | String | 未设置 | `pi-web` 可执行文件的显式路径；发现优先级最高。 |
 | `PiWebLoginShellPATH` | String | 未设置 | 一次性登录 shell 探测捕获并缓存的 `PATH`。 |
 | `PiWebLoginShellPiWeb` | String | 未设置 | 从登录 shell 捕获并缓存的 `pi-web` 路径。 |
@@ -255,12 +272,13 @@ GUI 启动时，应用先探测，再附加或启动，然后打开窗口；它�
 | 首选端口被占用 | `pi-web` 本身没有回退，会以 "Next.js exited unexpectedly" 退出；本壳已回退。 | 让本壳使用 `30151+` 或临时端口；在状态标题中查看活动 URL。用 `停止 Pi Web` 或 `--probe` 找到并停止过期实例。 |
 | 第二次启动看似毫无反应 | LaunchServices 会去重 bundle 启动；已在运行的实例收到激活通知并弹出自己的菜单。 | 点击菜单栏图标。若仍无反应，通过日志与状态标题确认运行中的实例。 |
 | 开机自启项指向仓库目录 | `.app` bundle 不在 `/Applications`，因此 `SMAppService.mainApp` 注册了仓库路径。 | 先运行 `./scripts/install.sh` 或 `make install`，再启用 `开机自启`；在此之前菜单会显示 `开机自启（App 需位于 /Applications）`。 |
-| pi-web 界面在默认浏览器而不是应用模式中打开 | 在 `/Applications` 下未找到四个规范的 Chrome 系应用。 | 在 `/Applications` 中安装 Google Chrome、Microsoft Edge、Brave 或 Arc，或接受默认浏览器。 |
+| pi-web 界面在默认浏览器而不是应用模式中打开 | 仅影响无头 `--open-url` 回退：在 `/Applications` 下未找到四个规范的 Chrome 系应用。 | 在 `/Applications` 中安装 Google Chrome、Microsoft Edge、Brave 或 Arc，或接受默认浏览器。GUI 始终使用原生窗口。 |
 
 ## 已知限制
 
 - **未测试：** 在此环境中未开启 `开机自启`（`SMAppService.mainApp`），因为 bundle 目前位于仓库内，注册会创建一个指向该处的登录项。菜单反映 `SMAppService` 返回的真实状态。
-- 浏览器探测只检查四个规范的 `/Applications` 路径（Chrome、Edge、Brave、Arc）；非标准安装位置会回退到默认浏览器。
+- 浏览器探测只检查四个规范的 `/Applications` 路径（Chrome、Edge、Brave、Arc）；非标准安装位置会回退到默认浏览器。这仅影响无头的 `--open-url` 标志——GUI 使用原生窗口。
+- 右侧 Option 全局热键需要在系统设置 > 隐私与安全性中授予 **输入监控**（event-tap 路径可能还需要辅助功能）权限；未授予时菜单会显示辅助项。应用为 ad-hoc 签名，重新构建可能重置该授权。
 - 探测是只读的，且从不清理过期记录（有意为之）。注意*附加*停止路径会调用 `pi-web stop`，上游会在该命令中清理过期记录。
 - 本壳仅在内存中跟踪归属；本壳崩溃后，它先前启动的实例在重启后会变成附加实例（仍可停止，此时通过 `pi-web stop`）。
 - `--stop-port`、`--test-cycle`、`--test-fallback` 与 `--test-quit` 用于验证，不属于正常菜单流程。
@@ -273,6 +291,8 @@ pi-web-desktop-macos/
 ├── Sources/                    由 swiftc 编译的 Swift 源码（无 SPM）
 │   ├── main.swift              入口 + 无头验证模式 + 单实例锁
 │   ├── MenuController.swift    NSStatusItem 菜单、图标与菜单动作
+│   ├── AppWindow.swift         单个原生 NSWindow + WKWebView 封装
+│   ├── HotKeyMonitor.swift     右侧 Option 全局热键（CGEvent tap / NSEvent 监视器）
 │   ├── StatusController.swift  探测 / 启动 / 停止编排与 UI 状态
 │   ├── ProcessManager.swift    pi-web 解析、子进程启动、就绪等待、信号升级
 │   ├── RunRecords.swift        运行记录解析、校验顺序与分类

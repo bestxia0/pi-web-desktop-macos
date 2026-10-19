@@ -5,13 +5,48 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-The version shown in the menu is `<semver>-<builddate>`, e.g. `V0.5.0-20261019`.
+The version shown in the menu is `<semver>-<builddate>`, e.g. `V0.6.0-20261019`.
 The semantic part comes from the [`VERSION`](VERSION) file; the build date is
 stamped by `build.sh` at build time.
 
 ## [Unreleased]
 
 Nothing yet.
+
+## [0.6.0] - 2026-10-19
+
+Native single window and a right-Option global hotkey.
+
+### Added
+
+- **Native single window** — the GUI now renders the pi-web UI in one reusable
+  `NSWindow` + `WKWebView` (`AppWindow.swift`) instead of opening a fresh
+  Chrome-family `--app` window on every launch. The window is created once and
+  reused: opening it again focuses it, reloads only when the URL actually
+  changed, and closing it (red button / Cmd+W) hides it rather than destroying
+  it. External links (host other than `127.0.0.1`/`localhost`) open in the
+  system browser. `Info.plist` gains `NSAppTransportSecurity →
+  NSAllowsLocalNetworking` so the web view may load `http://127.0.0.1`.
+- **Right-Option global hotkey** — tapping the **right** Option key toggles the
+  window (hide when visible and frontmost, otherwise show + focus). Implemented
+  in `HotKeyMonitor.swift` with a listen-only `CGEvent` tap and an `NSEvent`
+  global/local monitor fallback; the left Option key is ignored entirely and
+  the event is never consumed. Requires the macOS **Input Monitoring**
+  permission, with a menu helper item while it is missing.
+- **Menu items** — `显示 / 隐藏窗口`, a `右侧 Option 唤起窗口` checkbox, and a
+  permission warning item. The `menu build:` log line now records the hotkey
+  state (enabled, mode, permission).
+- **Preferences** — `PiWebHotKeyEnabled` (UserDefaults, default on).
+- **Self-test** — pure assertions for the right-vs-left Option classifier, the
+  window toggle decision, and the hotkey preference.
+
+### Changed
+
+- `StatusController.openWindow()` now returns `Bool`, prefers the GUI's
+  `openWindowHandler` (native window) and only falls back to
+  `BrowserOpener.openAppMode` when no handler is installed. `BrowserOpener`
+  stays intact for `--open-url`/`--resolve`.
+- `build.sh` links `-framework WebKit`.
 
 ## [0.5.0] - 2026-10-19
 
@@ -73,5 +108,6 @@ First public release: the menu bar launcher for the upstream `pi-web` web UI.
 - The build is ad-hoc signed, not notarised, so a downloaded copy needs
   Gatekeeper approval on first launch.
 
-[Unreleased]: https://github.com/bestxia0/pi-web-desktop-macos/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/bestxia0/pi-web-desktop-macos/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.6.0
 [0.5.0]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.5.0

@@ -30,6 +30,10 @@ enum SelfTest {
         testStopCommandArguments()
         testStopMenuItems()
         testStopAttachedPreference()
+        testHotKeyPreference()
+        testHotKeyClassifier()
+        testHotKeyDebounce()
+        testWindowToggleDecision()
         testVersionComposition()
 
         print("\n\(checks) checks, \(failures) failure(s)")
@@ -350,6 +354,71 @@ enum SelfTest {
         Preferences.setStopAttachedOnQuit(true, in: suite)
         check(Preferences.stopAttachedOnQuit(from: suite) == true, "persists ON")
         suite.removeObject(forKey: Preferences.stopAttachedOnQuitKey)
+    }
+
+    private static func testHotKeyPreference() {
+        print("right-Option hotkey preference")
+        guard let suite = UserDefaults(suiteName: "com.piweb.desktop.selftest.hotkey") else {
+            check(false, "could not create isolated UserDefaults suite")
+            return
+        }
+        suite.removeObject(forKey: Preferences.hotKeyEnabledKey)
+        check(Preferences.hotKeyEnabled(from: suite) == true, "defaults to ON when the key is unset")
+        Preferences.setHotKeyEnabled(false, in: suite)
+        check(Preferences.hotKeyEnabled(from: suite) == false, "persists OFF")
+        Preferences.setHotKeyEnabled(true, in: suite)
+        check(Preferences.hotKeyEnabled(from: suite) == true, "persists ON")
+        suite.removeObject(forKey: Preferences.hotKeyEnabledKey)
+    }
+
+    private static func testHotKeyClassifier() {
+        print("hotkey classifier (right Option only)")
+        check(HotKeyMonitor.classify(keyCode: 61, flags: [.maskAlternate]) == .pressed,
+              "right Option down -> pressed")
+        check(HotKeyMonitor.classify(keyCode: 61, flags: []) == .released,
+              "right Option up -> released")
+        check(HotKeyMonitor.classify(keyCode: 58, flags: [.maskAlternate]) == .ignored,
+              "left Option down -> ignored")
+        check(HotKeyMonitor.classify(keyCode: 58, flags: []) == .ignored,
+              "left Option up -> ignored")
+        check(HotKeyMonitor.classify(keyCode: 0, flags: [.maskAlternate]) == .ignored,
+              "unrelated key -> ignored")
+        check(HotKeyMonitor.classify(keyCode: 61, flags: [.maskAlternate, .maskCommand]) == .ignored,
+              "right Option with another modifier -> ignored")
+    }
+
+    private static func testHotKeyDebounce() {
+        print("hotkey debounce state machine")
+        check(HotKeyMonitor.decide(keyCode: 61, flags: [.maskAlternate], isDown: false)
+                == HotKeyMonitor.Decision(fire: true, isDown: true),
+              "right Option down fires once")
+        check(HotKeyMonitor.decide(keyCode: 61, flags: [.maskAlternate], isDown: true)
+                == HotKeyMonitor.Decision(fire: false, isDown: true),
+              "right Option held does not double fire")
+        check(HotKeyMonitor.decide(keyCode: 61, flags: [], isDown: true)
+                == HotKeyMonitor.Decision(fire: false, isDown: false),
+              "right Option release clears the latch")
+        check(HotKeyMonitor.decide(keyCode: 58, flags: [], isDown: true)
+                == HotKeyMonitor.Decision(fire: false, isDown: false),
+              "left Option release clears the overlap latch")
+        check(HotKeyMonitor.decide(keyCode: 58, flags: [.maskAlternate], isDown: true)
+                == HotKeyMonitor.Decision(fire: false, isDown: true),
+              "left Option keeps the latch")
+        check(HotKeyMonitor.decide(keyCode: 61, flags: [.maskAlternate, .maskCommand], isDown: false)
+                == HotKeyMonitor.Decision(fire: false, isDown: false),
+              "right Option chord does not fire")
+    }
+
+    private static func testWindowToggleDecision() {
+        print("native window toggle decision")
+        check(AppWindowController.toggleAction(isVisible: true, isKey: true) == .hide,
+              "visible + key -> hide")
+        check(AppWindowController.toggleAction(isVisible: true, isKey: false) == .show,
+              "visible but not key -> show")
+        check(AppWindowController.toggleAction(isVisible: false, isKey: false) == .show,
+              "hidden -> show")
+        check(AppWindowController.toggleAction(isVisible: false, isKey: true) == .show,
+              "hidden (key stale) -> show")
     }
 
     private static func testVersionComposition() {

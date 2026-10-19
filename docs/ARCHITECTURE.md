@@ -1,13 +1,20 @@
 # Architecture
 
-Pi Web Desktop is a menu bar **launcher**. It owns no server and renders no web
-content: its whole job is to detect, start, open and stop a local `pi-web`
-process, and to make that visible in the menu bar.
+Pi Web Desktop is a menu bar **launcher** for a local `pi-web` server. It owns
+no server: its job is to detect, start, open and stop the `pi-web` process, and
+to make that visible in the menu bar. The GUI presents the UI in its own
+**single native `WKWebView` window** (`AppWindowController`), reused for every
+open instead of spawning browser windows; Chrome app mode survives only as the
+fallback for the headless `--open-url` flag and `--resolve`.
 
 ```
-                 ┌──────────────────────────────────────────┐
-   menu bar  ◄───┤ MenuController      (AppKit, NSStatusItem)│
-                 └───────────────┬──────────────────────────┘
+  right ⌥ ──► HotKeyMonitor (CGEvent tap / NSEvent monitors)
+                    │ toggles
+                    ▼
+                 ┌──────────────────────────┐      ┌────────────────────────────┐
+   menu bar  ◄───┤ MenuController           │─────►│ AppWindowController        │
+                 │ (AppKit, NSStatusItem)   │ show │ (single NSWindow+WKWebView)│
+                 └───────────────┬──────────┘      └────────────────────────────┘
                                  │ reads state / calls actions
                  ┌───────────────▼──────────────────────────┐
                  │ StatusController   (orchestration, state)│
@@ -37,16 +44,18 @@ build.
 | `main.swift` | Process entry point. Parses the headless flags, applies `--port` / `PI_WEB_DESKTOP_PORT` to `AppConfig.preferredPortOverride`, implements the headless modes (`runProbe`, `runTestCycle`, `runTestFallback`, `runStopPort`, `runTestQuit`), holds the `SingleInstanceLock`, and otherwise starts `NSApplication` with `AppDelegate` in `.accessory` activation policy. `AppDelegate` wires up the `com.piweb.desktop.activate` observer and calls `start(openWhenReady:)` on launch. |
 | `AppConfig.swift` | Constants and path resolution: default port `30141`, fallback base `30151`, host `127.0.0.1`, bundle id, and the agent-directory expansion (`PI_CODING_AGENT_DIR` with `~` / `~/` / `file://` handling, else `~/.pi/agent`). Also the log file, support directory and lock file paths. Mirrors pi-web's `bin/run-records.js` `getAgentDir()` so both read the same records. |
 | `StatusController.swift` | The orchestrator. Owns `Phase` (`stopped` / `starting` / `running` / `stopping` / `failed`), the human-readable `detail`, `activeURL`, `ownedPid`, `attached`, `liveInstances` and `lastError`. Implements `refresh`, `start`, `stop`, `stopInstance`, `openWindow` and `stopForQuit`. Decides owned-vs-attached per instance and always re-detects after a stop. |
-| `MenuController.swift` | Builds the `NSStatusItem` menu and icon. Owns `updateIcon()` (SF Symbol + `Pi` title, tinted by phase), `buildMenu()`, the per-instance stop submenu wiring, and `revealMenu()` (used by the activate notification). Logs a `menu build:` line describing the menu it actually built — the regression evidence that the version row exists and is last. |
+| `MenuController.swift` | Builds the `NSStatusItem` menu and icon. Owns `updateIcon()` (SF Symbol + `Pi` title, tinted by phase), `buildMenu()`, the per-instance stop submenu wiring, the `AppWindowController`/`HotKeyMonitor` items, and `revealMenu()` (used by the activate notification). Logs a `menu build:` line describing the menu it actually built — the regression evidence that the version row exists and is last. |
+| `AppWindow.swift` | Owns the single native `NSWindow` + `WKWebView` that renders the pi-web UI. `show(url:)` reuses and focuses the window, reloading only when the URL actually changed; `toggle(url:)` hides when the window is visible *and* key, otherwise shows. `windowShouldClose` orders the window out instead of destroying it, and external links open in the system browser. `toggleAction(isVisible:isKey:)` is pure and covered by `--self-test`. |
+| `HotKeyMonitor.swift` | The right-Option global hotkey. `classify(keyCode:flags:)` is pure (right Option `61` only; left Option `58` is ignored) and `start()` prefers a listen-only `CGEvent` tap over `NSEvent` global/local monitors. Exposes the Input Monitoring / Accessibility checks and the System Settings deep link, and never consumes events. |
 | `ProcessManager.swift` | Resolves, spawns and stops the child. `start(port:spec:childPATH:)` returns the child pid; `waitForReady(url:timeout:)` polls until the URL answers; `stop()` performs the `SIGINT → 10s → SIGTERM → 5s → SIGKILL` escalation. Tracks `ownedPid` / `hasOwnedProcess`. |
 | `RunRecords.swift` | Detection. `RunRecordStore(directory:)` loads every `*.json`, and `detectLiveInstances()` classifies each record: liveness via `kill(pid, 0)` (`EPERM` counts), then ownership via `ps -ww -p <pid> -o args=`, and only then an HTTP probe of the recorded URL. Read-only: it never deletes a record. |
 | `PortPlanner.swift` | `isFree(port:)` does a `bind()` probe on `127.0.0.1`; `findFreePort(startingAt:)` scans upward (bounded); `ephemeralPort()` asks the kernel by binding to port `0`. Needed because `pi-web` has no fallback of its own. |
 | `EnvironmentResolver.swift` | Recovers the login shell's `PATH` and `pi-web` location (`/bin/zsh -lic`, 5s timeout), caches them, and assembles the `PATH` handed to the child — including every directory a `node` binary was found in, so `#!/usr/bin/env node` shebangs work. Also holds `systemDefaultPath`, used by `--gui-path`. |
 | `HTTPProbe.swift` | Minimal URL liveness check: any HTTP status counts as alive, with a short timeout. |
-| `BrowserOpener.swift` | `openAppMode(url:)` returns `.appMode(command)`, `.defaultBrowser(command)` or `.failed(reason)`. Tries the four canonical Chrome-family paths in `/Applications`, then falls back. `plannedCommand(url:)` exposes the decision without executing it (used by `--resolve`). |
+| `BrowserOpener.swift` | `openAppMode(url:)` returns `.appMode(command)`, `.defaultBrowser(command)` or `.failed(reason)`. Tries the four canonical Chrome-family paths in `/Applications`, then falls back. `plannedCommand(url:)` exposes the decision without executing it (used by `--resolve`). Retained for the headless `--open-url` flag and as the `openWindow()` fallback when no GUI handler is installed. |
 | `PiWebCommands.swift` | Builds and runs the upstream attached-stop command, `pi-web stop --port N`, with the resolved login-shell `PATH` and a timeout. Returns exit code / timed-out / launched, plus captured output. |
 | `LoginItem.swift` | `SMAppService.mainApp` wrapper: `currentState()` (`enabled`, `disabled`, `requiresApproval`, `notFound`, `unavailable(reason)`), `setEnabled(_:)`, `isEnabled()`, `isSupported`. |
-| `Preferences.swift` | UserDefaults-backed preferences in the bundle domain — currently `stopAttachedOnQuit` (`PiWebStopAttachedOnQuit`, default `true`). |
+| `Preferences.swift` | UserDefaults-backed preferences in the bundle domain — `stopAttachedOnQuit` (`PiWebStopAttachedOnQuit`, default `true`) and `hotKeyEnabled` (`PiWebHotKeyEnabled`, default `true`). |
 | `StopMenu.swift` | Pure, testable model for the multi-instance stop submenu: given the live instances and the owned pid, produce the titles (`<url>  pid <pid>（本壳）` for the owned one). No AppKit, so `--self-test` can assert on it. |
 | `VersionInfo.swift` | Composes the display version from `CFBundleShortVersionString` + `PiWebVersion` read out of the bundle, prefixed with `V`, falling back to `V0.0.0-dev` outside a bundle. Single source of truth for the menu row and `--version`. |
 | `Logger.swift` | Append-only logger writing to `~/Library/Logs/PiWeb/pi-web.log`, with `mirrorToStderr` for the headless modes. The spawned child's stdout/stderr are redirected to the same file. |
@@ -149,6 +158,27 @@ which is a reasonable default.
 system frameworks. It has no package manifest to resolve, no lockfile to drift,
 and no supply chain beyond Apple's SDK — which matters for a small tool that
 spawns processes on your behalf.
+
+**The single native window.** There is exactly one `NSWindow`/`WKWebView` for
+the whole process (`AppWindowController`). `打开 Pi Web`, the right-Option
+toggle and the launch path all route through `show(url:)`, which creates the
+window on first use and reuses it afterwards. It only calls
+`webView.load` when `loadedURL` differs from the requested URL, so focusing the
+window never triggers a reload; closing it (red button / Cmd+W) hits
+`windowShouldClose` and merely `orderOut`s it. Because the app is `.accessory`
+(`LSUIElement`), showing a key window requires an explicit
+`NSApp.activate(ignoringOtherApps: true)` before `makeKeyAndOrderFront`.
+
+**Right Option only.** A modifier-only global hotkey cannot be registered with
+Carbon's `RegisterEventHotKey`, so `HotKeyMonitor` uses a listen-only
+`CGEvent` tap (`flagsChanged`) and falls back to `NSEvent` global/local monitors
+when the tap cannot be created. It classifies keyCode `61` (right Option) as
+pressed/released and ignores keyCode `58` (left Option) and everything else, and
+the callback always returns the untouched event, so right Option keeps working
+as a normal modifier in other apps. macOS gates this behind **Input
+Monitoring** (and, for some setups, Accessibility): the menu shows a
+"需要「输入监控」权限" helper item while the grant is missing, and a rebuild can
+reset an ad-hoc-signed app's grant.
 
 **Data sources at a glance**
 

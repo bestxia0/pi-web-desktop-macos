@@ -378,12 +378,28 @@ func runGUI() {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let controller = StatusController()
+    let appWindow = AppWindowController()
     private var menu: MenuController?
+    private var hotKey: HotKeyMonitor?
     private var isQuitting = false
     private var activateObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        menu = MenuController(controller: controller)
+        // The GUI presents the active URL in its own single native window;
+        // BrowserOpener stays the fallback for headless `--open-url`.
+        controller.openWindowHandler = { [weak self] url in
+            self?.appWindow.show(url: url)
+        }
+
+        let hotKey = HotKeyMonitor()
+        hotKey.onToggle = { [weak self] in
+            guard let self else { return }
+            self.appWindow.toggle(url: self.controller.activeURL)
+        }
+        hotKey.setEnabled(Preferences.hotKeyEnabled)
+        self.hotKey = hotKey
+
+        menu = MenuController(controller: controller, appWindow: appWindow, hotKey: hotKey)
         activateObserver = DistributedNotificationCenter.default().addObserver(
             forName: activateNotification, object: nil, queue: .main
         ) { [weak self] _ in

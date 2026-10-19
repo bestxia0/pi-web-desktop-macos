@@ -16,19 +16,20 @@ A tiny native macOS menu bar launcher for the **pi-web** web UI: it detects, reu
 
 | What it is | What it is not |
 | --- | --- |
-| A native Swift + AppKit `NSStatusItem` menu bar app (`LSUIElement`, no Dock icon) | A webview or Electron shell — it embeds no browser engine |
+| A native Swift + AppKit `NSStatusItem` menu bar app (`LSUIElement`, no Dock icon) | A browser or Electron shell — it hosts its own single native `WKWebView` window, not a bundled browser engine |
 | A **launcher only**: it finds, starts and stops the `pi-web` CLI for you | A bundler — it never ships Node, npm or the `pi-web` package |
 | A front end for the upstream `pi-web` service on `127.0.0.1` | A replacement for `pi-web`; the CLI and `node` must already be installed |
 | A **zero-dependency** app built by `swiftc` alone | Dependent on SPM, CocoaPods or any third-party package |
 
-> **Runtime dependency:** a globally installed `pi-web` CLI plus `node`. The app is a launcher only — it does not embed a webview and does not bundle Node.
+> **Runtime dependency:** a globally installed `pi-web` CLI plus `node`. The app presents the UI in its own single native `WKWebView` window (reused on every open); it bundles no browser engine and no Node.
 
 ## Features
 
 - **Menu bar native** — a single `NSStatusItem` with an SF Symbol plus a short `Pi` title, coloured by state (green running / orange busy / red failed), and no Dock icon.
 - **Detect, then reuse** — on every launch it runs the same run-record contract as `pi-web` and attaches to a healthy existing instance instead of starting a second one.
 - **Start on demand** — spawns `pi-web --port <N> --no-open` on a free port, waits (up to 60s) until the URL answers, then opens the UI.
-- **Browser app mode** — opens the UI in a Chrome-family browser's app mode (no address bar), falling back to the default browser.
+- **Native single window** — the UI renders in one reusable `WKWebView` window; opening it again focuses that window instead of spawning another, and closing it hides rather than destroys it.
+- **Right-Option global hotkey** — tapping the **right** Option key toggles the window (hide when visible and frontmost, otherwise show + focus). The left Option key never triggers anything, and right Option keeps working as a normal modifier elsewhere.
 - **Two stop paths** — the instance it owns gets a `SIGINT → SIGTERM → SIGKILL` escalation; an attached instance is stopped through upstream `pi-web stop --port N` after a confirmation prompt.
 - **Port fallback** — `bind()`-probes `30141`, scans upward from `30151`, then falls back to a kernel-assigned ephemeral port, because `pi-web` itself has no fallback.
 - **Finder-friendly PATH resolution** — recovers the login shell's `PATH` and `pi-web` location once, so a GUI launch can find Homebrew's `pi-web` and `node`.
@@ -46,7 +47,7 @@ A tiny native macOS menu bar launcher for the **pi-web** web UI: it detects, reu
 *The full menu: open, start, stop, refresh, logs, Start at Login, quit behaviour and the version row.*
 
 ![The pi-web console UI running locally](docs/images/image-20261019134737277.png)
-*The `pi-web` console UI opened in the browser's app mode.*
+*The `pi-web` console UI rendered in the app's own native `WKWebView` window.*
 
 ## Requirements
 
@@ -54,7 +55,7 @@ A tiny native macOS menu bar launcher for the **pi-web** web UI: it detects, reu
 - **Xcode Command Line Tools** providing `swiftc` — the only build tool required.
 - To actually launch a server: a **globally installed `pi-web` CLI** and **`node`** on your `PATH`.
 
-No SPM, no CocoaPods, no third-party packages. The app compiles with `swiftc` alone against the system frameworks (Foundation, AppKit, ServiceManagement, UniformTypeIdentifiers).
+No SPM, no CocoaPods, no third-party packages. The app compiles with `swiftc` alone against the system frameworks (Foundation, AppKit, WebKit, CoreGraphics, ApplicationServices, ServiceManagement, UniformTypeIdentifiers).
 
 ## Quick start
 
@@ -89,7 +90,8 @@ Menu items are shown in Simplified Chinese. The table below lists them top to bo
 | --- | --- | --- |
 | `Pi Web — <detail>` | Status header at the top of the menu; shows the current phase, active URL/version or instance count. | Always present, disabled (display only). |
 | `错误：<message>` | Surfaces the most recent failure (newlines flattened to one line). | Appears only when there is an error. |
-| 打开 Pi Web | Opens the active URL in a Chrome/Edge/Brave/Arc app-mode window (no address bar), otherwise the default browser. Key equivalent `O`. | Enabled only while a live instance URL is known. |
+| 打开 Pi Web | Shows the active URL in the app's single native window (creating it if needed). Loads the URL only when it changed since the last load. Key equivalent `O`. | Enabled only while a live instance URL is known. |
+| 显示 / 隐藏窗口 | Toggles the single native window: hides it when it is visible and frontmost, otherwise shows and focuses it. | Enabled while a live instance URL is known or a window already exists. |
 | 启动 Pi Web | Detects first; attaches to an existing instance, otherwise starts one with `--no-open` on a free port and opens it. Key equivalent `S`. | Enabled only when the launcher is stopped or failed. |
 | 停止 Pi Web | Stops the instance. Owned → `SIGINT → 10s → SIGTERM → 5s → SIGKILL`; attached → a confirmation prompt, then upstream `pi-web stop --port N`. | Enabled when exactly one live instance. With several it becomes `停止 Pi Web（N 个实例）` with a per-instance submenu (`<url>  pid <pid>（本壳）` for owned). |
 | 刷新状态 | Re-runs detection and republishes the menu. Key equivalent `R`. | Always enabled. |
@@ -97,8 +99,10 @@ Menu items are shown in Simplified Chinese. The table below lists them top to bo
 | 在 Finder 中显示日志 | Reveals the log file in Finder. | Always enabled. |
 | 开机自启 | Registers/unregisters the app as a login item via `SMAppService.mainApp`. | Checkbox reflects the real state; title becomes `开机自启（需在系统设置中批准）` when approval is required and `开机自启（App 需位于 /Applications）` when the bundle is not installed; disabled with `开机自启不可用：<reason>` when unsupported. |
 | 退出时同时停止后台 pi-web | Toggles whether quitting also stops attached instances. Persisted in UserDefaults key `PiWebStopAttachedOnQuit`. | Checkbox, default **on**. Always enabled. |
+| 右侧 Option 唤起窗口 | Checkbox: enables/disables the right-Option global hotkey. Persisted in UserDefaults key `PiWebHotKeyEnabled`. | Checkbox, default **on**. Toggling immediately starts/stops `HotKeyMonitor`. |
 | 退出 Pi Web | Stops the owned child (and, when the toggle is on, every attached instance), then quits. Key equivalent `Q`. | Always enabled. |
-| `V<semver>-<builddate>` | The launcher version, e.g. `V0.5.0-20261019`. | Always present, disabled (display only), last row. |
+| ⚠︎ 需要「输入监控」权限——点击授权 | Requests Input Monitoring (`CGRequestListenEventAccess`) and opens System Settings > Privacy & Security > Input Monitoring. | Appears only while Input Monitoring is not granted, just before the version row. |
+| `V<semver>-<builddate>` | The launcher version, e.g. `V0.6.0-20261019`. | Always present, disabled (display only), last row. |
 
 ### Status icon
 
@@ -110,6 +114,31 @@ The status icon is drawn by `MenuController.updateIcon()`: an SF Symbol plus the
 | Starting / stopping (busy) | `arrow.triangle.2.circlepath` | Orange |
 | Stopped | `power.circle.fill` | Label colour |
 | Failed | `exclamationmark.triangle.fill` | Red |
+
+### Native window and right-Option hotkey
+
+The GUI renders the pi-web UI in **one** native `NSWindow` + `WKWebView`
+(`AppWindowController`), created on first use and reused afterwards:
+
+- Repeated `打开 Pi Web` / hotkey presses only focus the window. The web view
+  reloads only when the requested URL differs from the last loaded one.
+- Closing the window (red button / Cmd+W) hides it; it is never destroyed, so
+  reopening is instant and keeps scroll/back-forward state.
+- Links whose host is not `127.0.0.1`/`localhost` open in the system browser.
+
+Hitting the **right** Option key toggles the window: if it is visible and the
+key window it is hidden (`orderOut`), otherwise it is shown and focused
+(`NSApp.activate` + `makeKeyAndOrderFront`). The **left** Option key is ignored
+entirely, and the listener never consumes the event, so right Option keeps
+working as a modifier in other apps.
+
+The hotkey uses a listen-only `CGEvent` tap and falls back to `NSEvent`
+global/local monitors if the tap cannot be created. macOS gates it behind
+**Input Monitoring** (System Settings > Privacy & Security > Input Monitoring);
+while the grant is missing the menu shows a `⚠︎ 需要「输入监控」权限——点击授权`
+item. Because the app is ad-hoc signed, a rebuild can reset the grant. Toggle
+the whole feature with the `右侧 Option 唤起窗口` menu item or the
+`PiWebHotKeyEnabled` preference.
 
 ## Headless and verification flags
 
@@ -144,7 +173,7 @@ $BIN --log-path                                 # print the log file path
 | `--probe` | Print every run record with its step-2/step-3 classification and the attach/start decision. | Read-only; never deletes records. Verification only. |
 | `--test-cycle [--occupy] [--gui-path]` | Full start → ready → stop cycle against a throwaway instance. | `--occupy` pre-occupies the preferred port to exercise fallback; `--gui-path` forces the system-default PATH. Verification only. |
 | `--test-fallback` | Occupy the preferred port and report the fallback port the planner would pick. | Verification only. |
-| `--open-url <url>` | Open a URL in app mode, or the default browser, and print the command used. | — |
+| `--open-url <url>` | Open a URL through `BrowserOpener` (Chrome-family app mode, else the default browser) and print the command used. | Headless fallback only — the GUI uses the native window. |
 | `--resolve [--gui-path]` | Print the resolved `pi-web`, its source, the child PATH, `node`, the run dir and the browser plan. | `--gui-path` bypasses every cache and forces a probe. |
 | `--stop-port <n>` | Stop one instance through upstream `pi-web stop --port n` and print before/after detection. | Verification only. |
 | `--test-quit [--keep-attached]` | Exercise `stopForQuit`, scoped to `--port`. | `--keep-attached` simulates the toggle being off. Verification only. |
@@ -202,13 +231,13 @@ This only changes the *app* icon (Finder, Launchpad, Get Info). The **menu bar s
 
 ## Version
 
-`V0.5.0-20261019` is shown as the menu's last row, below `退出 Pi Web`, as a disabled display-only item. It comes from one place:
+`V0.6.0-20261019` is shown as the menu's last row, below `退出 Pi Web`, as a disabled display-only item. It comes from one place:
 
 | Source | Value | Written to Info.plist as |
 | --- | --- | --- |
-| `VERSION` file | `0.5.0` | `CFBundleShortVersionString` |
+| `VERSION` file | `0.6.0` | `CFBundleShortVersionString` |
 | `date +%Y%m%d` at build time | `20261019` | `CFBundleVersion` |
-| both, joined | `0.5.0-20261019` | `PiWebVersion` |
+| both, joined | `0.6.0-20261019` | `PiWebVersion` |
 
 So bumping the version is: edit `VERSION`, run `./build.sh`. Nothing is hardcoded in Swift and the date is never hand-maintained.
 
@@ -223,6 +252,7 @@ Stored in the bundle domain `com.piweb.desktop`. Set them with `defaults write c
 | Key | Type | Default | Effect |
 | --- | --- | --- | --- |
 | `PiWebStopAttachedOnQuit` | Bool | `true` | Whether `退出 Pi Web` also stops attached instances. Toggled in the menu. |
+| `PiWebHotKeyEnabled` | Bool | `true` | Whether the right-Option global hotkey is active. Toggled by the `右侧 Option 唤起窗口` menu item. |
 | `PiWebExecutablePath` | String | unset | Explicit path to the `pi-web` executable; highest discovery precedence. |
 | `PiWebLoginShellPATH` | String | unset | Cached `PATH` captured from the one-time login-shell probe. |
 | `PiWebLoginShellPiWeb` | String | unset | Cached path to `pi-web` captured from the login shell. |
@@ -249,12 +279,13 @@ On a GUI launch the app detects first, then attaches or starts, and opens the wi
 | The preferred port is busy | `pi-web` itself has no fallback and dies with "Next.js exited unexpectedly"; the shell has already fallen back. | Let the shell use `30151+` or an ephemeral port; check the active URL in the status header. Find and stop stale instances with `停止 Pi Web` or `--probe`. |
 | A second launch appears to do nothing | LaunchServices deduplicates bundle launches; the already-running instance receives the activate notification and pops its own menu. | Click the menu bar icon. If nothing appears, verify the running instance via the log and the status header. |
 | The Start at Login item points into the repository | The `.app` bundle is not in `/Applications`, so `SMAppService.mainApp` registers the repo path. | Run `./scripts/install.sh` or `make install` first, then enable `开机自启`; the menu shows `开机自启（App 需位于 /Applications）` until then. |
-| The pi-web UI opens in the default browser instead of app mode | None of the four canonical Chrome-family apps were found under `/Applications`. | Install Google Chrome, Microsoft Edge, Brave or Arc in `/Applications`, or accept the default browser. |
+| The pi-web UI opens in the default browser instead of app mode | Only affects the headless `--open-url` fallback: none of the four canonical Chrome-family apps were found under `/Applications`. | Install Google Chrome, Microsoft Edge, Brave or Arc in `/Applications`, or accept the default browser. The GUI always uses the native window. |
 
 ## Known limitations
 
 - **Not tested:** `Start at Login` (`SMAppService.mainApp`) was not switched on in this environment, because the bundle currently lives in the repository and registering would create a login item pointing there. The menu reflects the real status returned by `SMAppService`.
-- Browser detection only checks the four canonical `/Applications` paths (Chrome, Edge, Brave, Arc); a non-standard install location falls back to the default browser.
+- Browser detection only checks the four canonical `/Applications` paths (Chrome, Edge, Brave, Arc); a non-standard install location falls back to the default browser. This only affects the headless `--open-url` flag — the GUI uses its native window.
+- The right-Option global hotkey needs **Input Monitoring** (and, for the event-tap path, possibly Accessibility) to be granted in System Settings > Privacy & Security; the menu shows a helper item while the grant is missing. The app is ad-hoc signed, so a rebuild can reset the grant.
 - Detection is read-only and never prunes stale records (by design). Note that the *attached* stop path invokes `pi-web stop`, and upstream prunes stale records as part of that command.
 - The shell tracks ownership in memory only; after a shell crash, an instance it previously started becomes an attached instance on restart (still stoppable, now via `pi-web stop`).
 - `--stop-port`, `--test-cycle`, `--test-fallback` and `--test-quit` are for verification and are not part of the normal menu flow.
@@ -267,6 +298,8 @@ pi-web-desktop-macos/
 ├── Sources/                    Swift sources compiled by swiftc (no SPM)
 │   ├── main.swift              Entry point + headless verification modes + single-instance lock
 │   ├── MenuController.swift    NSStatusItem menu, icon and menu actions
+│   ├── AppWindow.swift         Single native NSWindow + WKWebView wrapper
+│   ├── HotKeyMonitor.swift     Right-Option global hotkey (CGEvent tap / NSEvent monitors)
 │   ├── StatusController.swift  Detect / start / stop orchestration and UI state
 │   ├── ProcessManager.swift    pi-web resolution, child spawn, readiness, signal escalation
 │   ├── RunRecords.swift        Run-record parsing, validation order and classification

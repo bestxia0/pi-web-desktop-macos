@@ -22,4 +22,24 @@ enum Preferences {
         get { stopAttachedOnQuit(from: .standard) }
         set { setStopAttachedOnQuit(newValue, in: .standard) }
     }
+
+    static let hotKeyEnabledKey = "PiWebHotKeyEnabled"
+    static let defaultHotKeyEnabled = true
+
+    /// Defaults to ON when the key has never been written.
+    static func hotKeyEnabled(from defaults: UserDefaults = .standard) -> Bool {
+        if defaults.object(forKey: hotKeyEnabledKey) == nil {
+            return defaultHotKeyEnabled
+        }
+        return defaults.bool(forKey: hotKeyEnabledKey)
+    }
+
+    static func setHotKeyEnabled(_ value: Bool, in defaults: UserDefaults = .standard) {
+        defaults.set(value, forKey: hotKeyEnabledKey)
+    }
+
+    static var hotKeyEnabled: Bool {
+        get { hotKeyEnabled(from: .standard) }
+        set { setHotKeyEnabled(newValue, in: .standard) }
+    }
 }

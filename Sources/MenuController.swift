@@ -5,9 +5,13 @@ import AppKit
 final class MenuController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let controller: StatusController
+    private let appWindow: AppWindowController
+    private let hotKey: HotKeyMonitor
 
-    init(controller: StatusController) {
+    init(controller: StatusController, appWindow: AppWindowController, hotKey: HotKeyMonitor) {
         self.controller = controller
+        self.appWindow = appWindow
+        self.hotKey = hotKey
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         controller.onChange = { [weak self] in self?.render() }
@@ -18,6 +22,7 @@ final class MenuController: NSObject, NSMenuDelegate {
     }
 
     func render() {
+        hotKey.refreshIfNeeded()
         updateIcon()
         statusItem.menu = buildMenu()
     }
@@ -93,6 +98,11 @@ final class MenuController: NSObject, NSMenuDelegate {
         open.isEnabled = controller.activeURL != nil
         menu.addItem(open)
 
+        let toggleWindow = NSMenuItem(title: "显示 / 隐藏窗口", action: #selector(toggleWindowClicked), keyEquivalent: "")
+        toggleWindow.target = self
+        toggleWindow.isEnabled = controller.activeURL != nil || appWindow.isVisible
+        menu.addItem(toggleWindow)
+
         let start = NSMenuItem(title: "启动 Pi Web", action: #selector(startClicked), keyEquivalent: "s")
         start.target = self
         start.isEnabled = controller.phase == .stopped || controller.phase == .failed
@@ -165,11 +175,28 @@ final class MenuController: NSObject, NSMenuDelegate {
         stopOnQuit.state = Preferences.stopAttachedOnQuit ? .on : .off
         menu.addItem(stopOnQuit)
 
+        let hotKeyItem = NSMenuItem(title: "右侧 Option 唤起窗口", action: #selector(hotKeyClicked), keyEquivalent: "")
+        hotKeyItem.target = self
+        hotKeyItem.state = Preferences.hotKeyEnabled ? .on : .off
+        menu.addItem(hotKeyItem)
+
         menu.addItem(.separator())
 
         let quit = NSMenuItem(title: "退出 Pi Web", action: #selector(quitClicked), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
+
+        // Permission helper, offered only while Input Monitoring is missing.
+        // Kept before the version row so the actionable item stays visible.
+        if !HotKeyMonitor.inputMonitoringGranted {
+            let warning = NSMenuItem(
+                title: "⚠︎ 需要「输入监控」权限——点击授权",
+                action: #selector(grantInputMonitoringClicked),
+                keyEquivalent: ""
+            )
+            warning.target = self
+            menu.addItem(warning)
+        }
 
         // The version row is the menu's last entry and is display-only.
         menu.addItem(.separator())
@@ -188,6 +215,9 @@ final class MenuController: NSObject, NSMenuDelegate {
         Logger.shared.info(
             "menu build: instances=\(controller.liveInstances.count) stop=\(stopDescription) "
             + "stopOnQuit=\(Preferences.stopAttachedOnQuit) "
+            + "hotkeyEnabled=\(Preferences.hotKeyEnabled) hotkeyMode=\(hotKey.mode.rawValue) "
+            + "inputMonitoring=\(HotKeyMonitor.inputMonitoringGranted) accessibility=\(HotKeyMonitor.accessibilityGranted) "
+            + "windowVisible=\(appWindow.isVisible) "
             + "version=\(VersionInfo.displayVersion) "
             + "last=\(menu.items.last?.title ?? "<none>") items=\(titles.joined(separator: " | "))"
         )
@@ -196,7 +226,28 @@ final class MenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func openClicked() {
-        _ = controller.openWindow()
+        appWindow.show(url: controller.activeURL)
+    }
+
+    @objc private func toggleWindowClicked() {
+        appWindow.toggle(url: controller.activeURL)
+    }
+
+    @objc private func hotKeyClicked() {
+        Preferences.hotKeyEnabled.toggle()
+        hotKey.setEnabled(Preferences.hotKeyEnabled)
+        Logger.shared.info(
+            "hotkey enabled set to \(Preferences.hotKeyEnabled) (mode=\(hotKey.mode.rawValue))"
+        )
+        render()
+    }
+
+    @objc private func grantInputMonitoringClicked() {
+        Logger.shared.info("hotkey: requesting Input Monitoring permission")
+        HotKeyMonitor.requestInputMonitoring()
+        HotKeyMonitor.openInputMonitoringSettings()
+        hotKey.refreshIfNeeded()
+        render()
     }
 
     @objc private func startClicked() { controller.start() }
