@@ -371,7 +371,7 @@ make build                    # same as ./build.sh
 
 `build.sh` runs one `swiftc` pass per architecture (both targeting `<arch>-apple-macos13.0`) and then `lipo -create`s them into a universal binary — still Apple's own tools only, so the zero-dependency rule holds. `swiftc`/`lipo` come with Xcode Command Line Tools.
 
-> When cross-compiling `x86_64` on Apple silicon, the linker may print `ignoring file '/Library/Developer/CommandLineTools/usr/lib/swift/macosx/libswiftCompatibilityPacks.a': fat file missing arch 'x86_64'`. That is a **harmless warning** caused by the CLT's back-deployment static library lacking an x86_64 slice; the universal binary is still produced, and the Intel side is really executed by the CI `macos-13` runner.
+> When cross-compiling `x86_64` on Apple silicon, the linker may print `ignoring file '/Library/Developer/CommandLineTools/usr/lib/swift/macosx/libswiftCompatibilityPacks.a': fat file missing arch 'x86_64'`. That is a **harmless warning** caused by the CLT's back-deployment static library lacking an x86_64 slice; the universal binary is still produced, and the Intel side is really executed by the CI `macos-15-intel` runner.
 
 ### Verification
 
@@ -406,7 +406,7 @@ So a release is:
 2. Commit (`chore: release vX.Y.Z`, or a `feat:`/`fix:` subject ending in `(vX.Y.Z)`).
 3. `make release`.
 
-`.github/workflows/ci.yml` runs `./build.sh` plus `scripts/verify.sh --no-build` on `macos-13` (Intel) and `macos-14` (Apple silicon) and asserts the universal binary — the Intel runner is the only place the `x86_64` slice is really executed.
+`.github/workflows/ci.yml` runs `./build.sh` plus `scripts/verify.sh --no-build` on `macos-15-intel` (Intel) and `macos-15` (Apple silicon) and asserts the universal binary — the Intel runner is the only place the `x86_64` slice is really executed. `macos-13` was retired and bare `macos-14` is deprecated and arm64-only, so neither can cover the Intel slice.
 
 ### Project layout
 

@@ -112,10 +112,11 @@ Types in use: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`,
 6. Fill in the pull request template.
 
 Every pull request runs the [CI workflow](.github/workflows/ci.yml) on two macOS
-runners, `macos-13` (Intel, which is also the oldest supported OS) and `macos-14`
-(Apple silicon), and asserts the universal binary in both. Note that CI has no
-`pi-web` installed, so it only builds the app and runs the checks that do not
-need a server.
+runners, `macos-15-intel` (Intel) and `macos-15` (Apple silicon), and asserts the
+universal binary on both — the Intel runner is the only place the `x86_64` slice
+is really executed. `macos-13` is retired and bare `macos-14` is deprecated and
+arm64-only, so do not reintroduce them. Note that CI has no `pi-web` installed,
+so it only builds the app and runs the checks that do not need a server.
 
 ## Releasing
 

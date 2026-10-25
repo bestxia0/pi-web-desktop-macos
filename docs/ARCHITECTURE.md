@@ -174,7 +174,7 @@ on Apple silicon, never the other way round. `scripts/verify.sh`, CI and the
 release workflow all fail the build when a slice is missing. Cross-compiling
 `x86_64` on Apple silicon can print a benign `libswiftCompatibilityPacks.a`
 linker warning, because that CLT back-deployment library has no x86_64 slice;
-the Intel side is really executed by the `macos-13` CI runner.
+the Intel side is really executed by the `macos-15-intel` CI runner.
 
 **Why releases are cut from a tag.** `make release` (`scripts/release.sh`)
 refuses a dirty tree or an existing tag, runs `scripts/check-docs.sh` and the

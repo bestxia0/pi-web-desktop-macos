@@ -11,7 +11,13 @@ stamped by `build.sh` at build time.
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **CI runner labels.** 0.8.0 shipped `macos-13` + `macos-14`; `macos-13` is
+  retired (jobs sat queued forever, so no CI run ever completed on it) and bare
+  `macos-14` is deprecated and arm64-only. The matrix is now
+  `macos-15-intel` (Intel, where the `x86_64` slice is really executed) +
+  `macos-15` (arm64), and `.github/workflows/release.yml` runs on `macos-15`.
 
 ## [0.8.0] - 2026-10-25
 
@@ -35,10 +41,12 @@ never pushed even though the changelog linked to their releases.
   GitHub Actions from the tag, so nothing is uploaded from the developer's
   machine. `--dry-run` stops before the tag is created.
 - **`make check-docs`** and **`make release`** targets in the `Makefile`.
-- **CI matrix** (`macos-13` Intel + `macos-14` arm64): the Intel runner is the
-  only place the `x86_64` slice is really executed, and it is the oldest OS the
-  app claims to support. CI now runs `scripts/verify.sh --no-build` instead of
-  the three individual headless flags it used to call.
+- **CI matrix** (`macos-15-intel` Intel + `macos-15` arm64): the Intel runner is
+  the only place the `x86_64` slice is really executed. The old `macos-13`
+  label is retired (jobs queue forever) and bare `macos-14` is deprecated and
+  arm64-only, so neither could cover the Intel slice. CI now runs
+  `scripts/verify.sh --no-build` instead of the three individual headless flags
+  it used to call, and `.github/workflows/release.yml` runs on `macos-15`.
 - **Architecture assertions** in `scripts/verify.sh`, in CI and in the release
   workflow: publishing a single-architecture bundle now fails the build.
 - **Screenshot inventory** in `docs/images/README.md`, kept truthful by the

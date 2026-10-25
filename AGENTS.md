@@ -43,7 +43,7 @@ Use them for verification instead of clicking through the UI. `make install` wri
 | `scripts/check-docs.sh` | documentation drift gate (`make check-docs`) |
 | `scripts/release.sh` | tag + push, which is what actually publishes (`make release`) |
 | `build.sh` | the build path: per-arch `swiftc`, `lipo`, icon, Info.plist, codesign |
-| `.github/workflows/ci.yml`, `release.yml` | CI matrix (macos-13 Intel + macos-14) and tag-driven publishing |
+| `.github/workflows/ci.yml`, `release.yml` | CI matrix (macos-15-intel + macos-15 arm64) and tag-driven publishing |
 
 Read `README.md` (English) / `README.zh-CN.md` (primary, more detailed) and
 `CHANGELOG.md` for the user-facing contract; `docs/` holds screenshots and design notes.

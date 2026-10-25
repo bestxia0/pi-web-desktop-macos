@@ -371,7 +371,7 @@ make build                    # 等价于 ./build.sh
 
 `build.sh` 对每个架构跑一次 `swiftc`（都指定 `-target <arch>-apple-macos13.0`），再用 `lipo -create` 合成通用二进制——仍然只有 Apple 自带工具，零依赖红线不破。`swiftc`/`lipo` 只要 Xcode Command Line Tools。
 
-> 在 Apple 芯片上交叉编译 `x86_64` 时，链接器可能打印 `ignoring file '/Library/Developer/CommandLineTools/usr/lib/swift/macosx/libswiftCompatibilityPacks.a': fat file missing arch 'x86_64'`。这是 CLT 自带的向后兼容静态库缺 x86_64 切片导致的**无害告警**，通用二进制仍然生成；Intel 侧的真正执行由 CI 的 `macos-13` runner 覆盖。
+> 在 Apple 芯片上交叉编译 `x86_64` 时，链接器可能打印 `ignoring file '/Library/Developer/CommandLineTools/usr/lib/swift/macosx/libswiftCompatibilityPacks.a': fat file missing arch 'x86_64'`。这是 CLT 自带的向后兼容静态库缺 x86_64 切片导致的**无害告警**，通用二进制仍然生成；Intel 侧的真正执行由 CI 的 `macos-15-intel` runner 覆盖。
 
 ### 验证
 
@@ -406,7 +406,7 @@ make release                  # = ./scripts/release.sh
 2. 提交（`chore: release vX.Y.Z` 或用带 `(vX.Y.Z)` 的 `feat:`/`fix:` 主题）。
 3. `make release`。
 
-`.github/workflows/ci.yml` 在 `macos-13`（Intel）和 `macos-14`（Apple 芯片）上各跑一遍 `./build.sh` + `scripts/verify.sh --no-build`，并断言通用二进制——Intel runner 是唯一真正执行 `x86_64` 切片的地方。
+`.github/workflows/ci.yml` 在 `macos-15-intel`（Intel）和 `macos-15`（Apple 芯片）上各跑一遍 `./build.sh` + `scripts/verify.sh --no-build`，并断言通用二进制——Intel runner 是唯一真正执行 `x86_64` 切片的地方。`macos-13` 已退役（任务会一直排队），裸 `macos-14` 已废弃且只有 arm64，两者都覆盖不到 Intel 切片。
 
 ### 项目结构
 
