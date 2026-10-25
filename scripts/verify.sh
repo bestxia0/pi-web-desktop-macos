@@ -28,6 +28,11 @@ pass=0
 fail=0
 skip=0
 
+# The build is chatty, so its output is buffered to a scratch file and only
+# echoed when it fails. Keep it out of a fixed /tmp path (which would outlive
+# the run) and remove it on the way out, however the suite exits.
+BUILD_LOG="$(mktemp "${TMPDIR:-/tmp}/piweb-verify-build.XXXXXX")"
+
 ok() { printf '  \033[32mPASS\033[0m %s\n' "$1"; pass=$((pass + 1)); }
 no() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 sk() { printf '  \033[33mSKIP\033[0m %s\n' "$1"; skip=$((skip + 1)); }
@@ -80,6 +85,8 @@ cleanup() {
   if [[ -x "$BIN" ]]; then
     "$BIN" --stop-port "$TEST_PORT" >/dev/null 2>&1 || true
   fi
+  # Never leave the buffered build log behind.
+  rm -f "$BUILD_LOG"
 }
 trap cleanup EXIT
 
@@ -92,11 +99,11 @@ echo
 # ---------------------------------------------------------------- build ----
 if ((DO_BUILD)); then
   echo "Build"
-  if (cd "$ROOT" && ./build.sh) >/tmp/piweb-verify-build.log 2>&1; then
+  if (cd "$ROOT" && ./build.sh) >"$BUILD_LOG" 2>&1; then
     ok "./build.sh"
   else
     no "./build.sh"
-    sed 's/^/       /' /tmp/piweb-verify-build.log | tail -30
+    sed 's/^/       /' "$BUILD_LOG" | tail -30
   fi
   echo
 fi

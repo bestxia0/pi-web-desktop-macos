@@ -18,6 +18,11 @@ stamped by `build.sh` at build time.
   `macos-14` is deprecated and arm64-only. The matrix is now
   `macos-15-intel` (Intel, where the `x86_64` slice is really executed) +
   `macos-15` (arm64), and `.github/workflows/release.yml` runs on `macos-15`.
+- **`scripts/verify.sh` no longer leaves a build log behind.** It buffered the
+  build output into a fixed `/tmp/piweb-verify-build.log` that outlived the run.
+  The log is now a `mktemp` scratch file removed by the suite's existing exit
+  trap, so a verification run leaves nothing on the machine — matching what the
+  README already promised ("cleans up everything it starts").
 
 ## [0.8.0] - 2026-10-25
 
