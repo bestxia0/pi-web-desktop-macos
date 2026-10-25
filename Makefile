@@ -9,7 +9,7 @@ BIN        := $(APP)/Contents/MacOS/PiWeb
 INSTALLED  := /Applications/PiWeb.app
 LOG_FILE   := $(HOME)/Library/Logs/PiWeb/pi-web.log
 
-.PHONY: help build run install uninstall verify clean version log
+.PHONY: help build run install uninstall verify check-docs release clean version log
 
 help: ## Show this help
 	@echo "Pi Web Desktop (macOS) — available targets:"
@@ -37,6 +37,12 @@ uninstall: ## Remove /Applications/PiWeb.app
 
 verify: ## Run the headless verification suite (scripts/verify.sh)
 	./scripts/verify.sh
+
+check-docs: ## Check VERSION / CHANGELOG / both READMEs for drift
+	./scripts/check-docs.sh
+
+release: ## Verify, then tag and push VERSION so GitHub Actions publishes it
+	./scripts/release.sh
 
 clean: ## Delete the build/ directory
 	rm -rf build

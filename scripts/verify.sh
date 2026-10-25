@@ -109,6 +109,15 @@ if [[ ! -x "$BIN" ]]; then
 fi
 ok "binary exists"
 
+# The shipped bundle must run on both Apple silicon and Intel: an arm64-only
+# binary refuses to launch on Intel Macs. `lipo` ships with the same toolchain.
+ARCH_LIST="$(lipo -archs "$BIN" 2>/dev/null || echo unknown)"
+if [[ "$ARCH_LIST" == *arm64* && "$ARCH_LIST" == *x86_64* ]]; then
+  ok "binary is universal ($ARCH_LIST)"
+else
+  no "binary is not universal (archs: $ARCH_LIST); build without PI_WEB_ARCHS"
+fi
+
 # -------------------------------------------------------------- core ----
 echo
 echo "Core"
@@ -166,6 +175,11 @@ if ((PI_WEB_FOUND)); then
     sk "end-to-end cycles (set VERIFY_FULL=1 to enable; they start a real pi-web)"
   fi
 fi
+
+# -------------------------------------------------------------- docs ----
+echo
+echo "Documentation"
+check "scripts/check-docs.sh" 60 "$ROOT/scripts/check-docs.sh"
 
 # ----------------------------------------------------------- summary ----
 echo

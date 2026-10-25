@@ -2,7 +2,9 @@
 
 Thanks for taking a look at Pi Web Desktop. This is a small, deliberately
 dependency-free project; the bar for changes is "keeps the build a single
-`swiftc` invocation and keeps the headless self-test honest".
+`swiftc` toolchain invocation and keeps the headless self-test honest".
+`AGENTS.md` holds the repo rules for AI collaborators; it is version controlled,
+so treat it as part of the contract.
 
 ## Getting set up
 
@@ -25,11 +27,19 @@ npm install -g @agegr/pi-web
 make verify          # builds, then runs the headless verification suite
 ./scripts/verify.sh --no-build   # the same suite against the existing build
 VERIFY_FULL=1 ./scripts/verify.sh   # also runs the end-to-end start/stop cycles
+make check-docs      # version / changelog / README-consistency checks
 ```
 
 `scripts/verify.sh` only ever uses the throwaway port `30199`, never `30141`, and
-stops anything it started. Individual checks map directly to the binary's
-headless flags, which are documented in the [README](README.md#headless-and-verification-flags).
+stops anything it started; it asserts that the bundle is universal and runs the
+documentation check. Individual checks map directly to the binary's headless
+flags, which are documented in the [README](README.md#headless-and-verification-flags).
+
+`make check-docs` (`scripts/check-docs.sh`) is deliberately pedantic about the
+things that drifted historically: the version examples in both READMEs and
+`CHANGELOG.md` must match `VERSION`, the two READMEs must reference the same
+screenshots / flags / keys / variables, and every `docs/images` file must be
+referenced or listed in `docs/images/README.md`.
 
 Useful when debugging:
 
@@ -48,6 +58,10 @@ tail -f ~/Library/Logs/PiWeb/pi-web.log
 - **Keep `Sources/` flat.** `build.sh` compiles the directory with
   `"$ROOT"/Sources/*.swift`, so the sources are a single flat directory by
   design. Adding a subdirectory silently drops files from the build.
+- **Keep the build universal.** `build.sh` compiles `arm64` and `x86_64` and
+  `lipo`s them together, because the app claims macOS 13+ and an arm64-only
+  bundle will not launch on an Intel Mac. Never publish a single-architecture
+  artifact.
 - **No hardcoded versions.** The version flows from the `VERSION` file and the
   build date through `Info.plist`. Never inline a version string in Swift.
 - **Blocking work belongs on `StatusController.work`**, and UI state is published
@@ -97,9 +111,21 @@ Types in use: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`,
    PR — see [docs/images/README.md](docs/images/README.md).
 6. Fill in the pull request template.
 
-Every pull request runs the [CI workflow](.github/workflows/ci.yml) on a macOS
-runner. Note that CI has no `pi-web` installed, so it only builds the app and
-runs the checks that do not need a server.
+Every pull request runs the [CI workflow](.github/workflows/ci.yml) on two macOS
+runners, `macos-13` (Intel, which is also the oldest supported OS) and `macos-14`
+(Apple silicon), and asserts the universal binary in both. Note that CI has no
+`pi-web` installed, so it only builds the app and runs the checks that do not
+need a server.
+
+## Releasing
+
+Releases are cut from a tag, not from a laptop: `make release`
+(`scripts/release.sh`) requires a clean tree, bumps nothing by itself, runs
+`make check-docs` plus the full verification suite, then tags `v<VERSION>` and
+pushes the branch and the tag. `.github/workflows/release.yml` builds the
+universal `PiWeb-<version>.zip` from that tag and publishes the GitHub release.
+So: edit `VERSION`, add the `CHANGELOG.md` section and its `v<VERSION>` link,
+commit, then `make release`.
 
 ## Reporting bugs and requesting features
 
