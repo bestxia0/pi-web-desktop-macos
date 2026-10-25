@@ -21,8 +21,27 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP="$ROOT/build/PiWeb.app"
 BIN="$APP/Contents/MacOS/PiWeb"
-ARCH="$(uname -m)"
-TARGET="${ARCH}-apple-macos13.0"
+MIN_OS="13.0"
+
+# Universal by default: the README promises "macOS 13+", and an arm64-only
+# bundle refuses to launch on an Intel Mac (Rosetta translates x86_64 on Apple
+# silicon, never arm64 on Intel). Override for a faster local loop, e.g.
+#   PI_WEB_ARCHS=arm64 ./build.sh
+ARCHS_RAW="${PI_WEB_ARCHS:-arm64 x86_64}"
+ARCHS=()
+for arch in $ARCHS_RAW; do
+  case "$arch" in
+    arm64|x86_64) ARCHS+=("$arch") ;;
+    *)
+      echo "!! Unsupported arch '$arch' in PI_WEB_ARCHS (use arm64 and/or x86_64)" >&2
+      exit 1
+      ;;
+  esac
+done
+if (( ${#ARCHS[@]} == 0 )); then
+  echo "!! PI_WEB_ARCHS is empty; nothing to build" >&2
+  exit 1
+fi
 
 # --- version ---------------------------------------------------------------
 VERSION_FILE="$ROOT/VERSION"
@@ -38,17 +57,36 @@ echo "==> Cleaning $APP"
 rm -rf "$APP"
 mkdir -p "$(dirname "$BIN")" "$APP/Contents/Resources"
 
-echo "==> Compiling with swiftc (target $TARGET)"
-swiftc \
-  -swift-version 5 \
-  -O \
-  -target "$TARGET" \
-  -framework AppKit \
-  -framework WebKit \
-  -framework ServiceManagement \
-  -framework UniformTypeIdentifiers \
-  -o "$BIN" \
-  "$ROOT"/Sources/*.swift
+# --- compile ---------------------------------------------------------------
+# One swiftc pass per architecture into a scratch directory, then `lipo`
+# stitches them together. Still swiftc-only: lipo ships with the same Xcode
+# Command Line Tools, so the zero-dependency rule holds.
+SLICE_DIR="$(mktemp -d)"
+trap 'rm -rf "$SLICE_DIR"' EXIT
+SLICES=()
+
+for arch in "${ARCHS[@]}"; do
+  SLICE="$SLICE_DIR/PiWeb-$arch"
+  echo "==> Compiling with swiftc ($arch, min macOS $MIN_OS)"
+  swiftc \
+    -swift-version 5 \
+    -O \
+    -target "${arch}-apple-macos${MIN_OS}" \
+    -framework AppKit \
+    -framework WebKit \
+    -framework ServiceManagement \
+    -framework UniformTypeIdentifiers \
+    -o "$SLICE" \
+    "$ROOT"/Sources/*.swift
+  SLICES+=("$SLICE")
+done
+
+if (( ${#SLICES[@]} == 1 )); then
+  cp "${SLICES[0]}" "$BIN"
+else
+  lipo -create "${SLICES[@]}" -output "$BIN"
+fi
+echo "    architectures: $(lipo -archs "$BIN")"
 
 # --- app icon --------------------------------------------------------------
 # The source is a small (282x267) non-square JPEG, so it is centre-cropped to a
