@@ -12,7 +12,9 @@ permissions:
 jobs:
   release:
     name: Package and publish
-    runs-on: macos-14
+    # `macos-15` is the current arm64 image; the build is universal either way,
+    # but avoid the retired `macos-13` / deprecated bare `macos-14` labels.
+    runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@v5

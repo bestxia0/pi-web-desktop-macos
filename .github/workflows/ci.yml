@@ -22,9 +22,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-13 is an Intel runner and the oldest OS the app claims to
-        # support, so it is the only place the x86_64 slice is really executed.
-        os: [macos-13, macos-14]
+        # Both labels are current: `macos-15` is arm64 and `macos-15-intel` is
+        # the x64 image. Do not use `macos-13` (retired, jobs queue forever) or
+        # bare `macos-14` (deprecated, and arm64 despite the old x64 meaning).
+        # The Intel leg is the only place the x86_64 slice is really executed.
+        os: [macos-15-intel, macos-15]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
