@@ -17,8 +17,14 @@ permissions:
 
 jobs:
   build-and-test:
-    name: Build and verify
-    runs-on: macos-14
+    name: Build and verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-13 is an Intel runner and the oldest OS the app claims to
+        # support, so it is the only place the x86_64 slice is really executed.
+        os: [macos-13, macos-14]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -27,26 +33,30 @@ jobs:
         run: |
           swiftc --version
           sw_vers
+          uname -m
 
       - name: Build app bundle
         run: ./build.sh
 
+      # The README promises "macOS 13+", which is only true while both slices
+      # are present: an arm64-only bundle refuses to launch on an Intel Mac.
+      - name: Assert the bundle is universal
+        run: |
+          archs="$(lipo -archs build/PiWeb.app/Contents/MacOS/PiWeb)"
+          echo "architectures: $archs"
+          [[ "$archs" == *arm64* ]]  || { echo "!! missing arm64 slice" >&2; exit 1; }
+          [[ "$archs" == *x86_64* ]] || { echo "!! missing x86_64 slice" >&2; exit 1; }
+
       # The suite is deliberately environment-agnostic: assertions that need a
       # locally installed `pi-web` or `node` are scoped to the branch the
       # machine can exercise, so a clean runner needs no shims and no network.
-      - name: Self-test
-        run: build/PiWeb.app/Contents/MacOS/PiWeb --self-test
-
-      - name: Log path
-        run: build/PiWeb.app/Contents/MacOS/PiWeb --log-path
-
-      - name: Version
-        run: build/PiWeb.app/Contents/MacOS/PiWeb --version
+      - name: Verification suite
+        run: ./scripts/verify.sh --no-build
 
       - name: Upload app bundle
         uses: actions/upload-artifact@v5
         with:
-          name: PiWeb.app
+          name: PiWeb.app (${{ matrix.os }})
           path: build/PiWeb.app
           if-no-files-found: error
           retention-days: 14

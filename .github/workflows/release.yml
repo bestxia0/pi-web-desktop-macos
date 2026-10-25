@@ -24,6 +24,18 @@ jobs:
         id: version
         run: echo "value=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
 
+      # Never publish a single-architecture build: the app claims macOS 13+,
+      # and an arm64-only bundle will not launch on an Intel Mac.
+      - name: Assert the bundle is universal
+        run: |
+          archs="$(lipo -archs build/PiWeb.app/Contents/MacOS/PiWeb)"
+          echo "architectures: $archs"
+          [[ "$archs" == *arm64* ]]  || { echo "!! missing arm64 slice" >&2; exit 1; }
+          [[ "$archs" == *x86_64* ]] || { echo "!! missing x86_64 slice" >&2; exit 1; }
+
+      - name: Documentation consistency
+        run: ./scripts/check-docs.sh
+
       - name: Package app bundle
         run: |
           ditto -c -k --sequesterRsrc --keepParent \
@@ -35,5 +47,5 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" \
             "PiWeb-${{ steps.version.outputs.value }}.zip" \
-            --title "PiWeb ${{ steps.version.outputs.value }}" \
+            --title "PiWeb ${{ steps.version.outputs.value }} (arm64 + x86_64)" \
             --generate-notes
