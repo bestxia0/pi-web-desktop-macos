@@ -56,19 +56,19 @@ if ! screencapture -x "$TMP/probe.png" 2>"$TMP/err.txt"; then
              screencapture -x -R"0,0,1728,48" /tmp/menubar.png
              sips -c 76 160 /tmp/menubar.png --out docs/images/menubar-icon.png
 
-      4. menu-open.png — launch the app a SECOND time; the running instance
+      4. menu.png — launch the app a SECOND time; the running instance
          pops its own menu (distributed notification com.piweb.desktop.activate).
          Capture immediately while the menu is still open:
              open build/PiWeb.app
              screencapture -x /tmp/menu.png
          Then crop the menu plus a small margin.
 
-      5. piweb-ui.png — the pi-web UI itself, which needs no screen recording:
+      5. pi-web-console.png — the pi-web UI itself, which needs no screen recording:
              "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
                --headless=new --disable-gpu --hide-scrollbars \
                --user-data-dir=/tmp/chrome-shot --window-size=1440,900 \
                --virtual-time-budget=10000 \
-               --screenshot=docs/images/piweb-ui.png http://127.0.0.1:30141
+               --screenshot=docs/images/pi-web-console.png http://127.0.0.1:30141
 EOF
   exit 0
 fi
@@ -90,12 +90,12 @@ screencapture -x -R"0,0,${WIDTH},48" "$TMP/menubar.png"
 sips -c 48 240 "$TMP/menubar.png" --out "$IMAGES/menubar-icon.png" >/dev/null
 echo "    wrote $IMAGES/menubar-icon.png (crop by hand for a tighter frame)"
 
-echo "==> menu-open.png"
+echo "==> menu.png"
 open "$APP" # second launch pops the running instance's menu
 sleep 3
 screencapture -x "$TMP/menu-full.png" && echo "    raw capture: $TMP/menu-full.png"
-cp "$TMP/menu-full.png" "$IMAGES/menu-open.png" 2>/dev/null || true
-echo "    wrote $IMAGES/menu-open.png (full screen — crop to the menu by hand)"
+cp "$TMP/menu-full.png" "$IMAGES/menu.png" 2>/dev/null || true
+echo "    wrote $IMAGES/menu.png (full screen — crop to the menu by hand)"
 
 echo "==> Done. Review docs/images/ and re-crop anything that looks off."
 echo "    The app was left running; use the menu to quit it, or: pkill -x PiWeb"

@@ -5,13 +5,75 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-The version shown in the menu is `<semver>-<builddate>`, e.g. `V0.7.1-20261019`.
+The version shown in the menu is `<semver>-<builddate>`, e.g. `V0.8.0-20261025`.
 The semantic part comes from the [`VERSION`](VERSION) file; the build date is
 stamped by `build.sh` at build time.
 
 ## [Unreleased]
 
 Nothing yet.
+
+## [0.8.0] - 2026-10-25
+
+Universal builds, and a release path that actually publishes. `build.sh` used to
+compile for the host architecture only, so every release artifact was arm64-only
+and would not launch on an Intel Mac, and the tags for 0.6.0/0.7.0/0.7.1 were
+never pushed even though the changelog linked to their releases.
+
+### Added
+
+- **`scripts/check-docs.sh`** (`make check-docs`) — zero-dependency
+  documentation checks: every `V<semver>-<date>` example must match `VERSION`,
+  `CHANGELOG.md` must have a section and a release link for the current
+  version, the version table in each README must quote it, both READMEs must
+  reference the same screenshots and the same flags / `UserDefaults` keys /
+  environment variables, and every `docs/images` file must be referenced or
+  documented. It runs in `make verify`, in `make release` and in CI.
+- **`scripts/release.sh`** (`make release`) — refuses a dirty tree or an
+  existing tag, runs the docs check and the full verification suite, then tags
+  `v<VERSION>` and pushes the branch and tag. The release itself is built by
+  GitHub Actions from the tag, so nothing is uploaded from the developer's
+  machine. `--dry-run` stops before the tag is created.
+- **`make check-docs`** and **`make release`** targets in the `Makefile`.
+- **CI matrix** (`macos-13` Intel + `macos-14` arm64): the Intel runner is the
+  only place the `x86_64` slice is really executed, and it is the oldest OS the
+  app claims to support. CI now runs `scripts/verify.sh --no-build` instead of
+  the three individual headless flags it used to call.
+- **Architecture assertions** in `scripts/verify.sh`, in CI and in the release
+  workflow: publishing a single-architecture bundle now fails the build.
+- **Screenshot inventory** in `docs/images/README.md`, kept truthful by the
+  docs check above.
+
+### Changed
+
+- **`build.sh` produces a universal binary.** One `swiftc` pass per
+  architecture (`arm64` and `x86_64`, both targeting `macOS 13.0`) into a
+  scratch directory, then `lipo -create`. Still `swiftc` + `lipo` only, so the
+  zero-dependency rule holds. `PI_WEB_ARCHS=arm64 ./build.sh` builds a single
+  slice for a faster local loop; the bundle is ad-hoc signed as before when no
+  stable identity is available.
+- **READMEs rewritten around real scenarios** (first install, daily use,
+  attaching to an instance started in a terminal, stopping/quitting, diagnosis,
+  upgrading) with the reference tables moved behind them. Both languages were
+  updated together; the version examples, which still said `0.7.0`, now match
+  `VERSION`.
+- **`AGENTS.md` is tracked by git** instead of living as an untracked file, and
+  now states the release rule (tag + push via `make release`), the universal
+  binary requirement and the docs check.
+- **`docs/images` cleaned up:** the placeholder `menu-open.png` (never
+  referenced) and the duplicate `docks.png` are gone; `pi-web-ui-icon.png`
+  became `menu.png` and `image-20261019134737277.png` became
+  `pi-web-console.png`, because neither name said what the picture shows.
+  `scripts/capture-screenshots.sh` follows the new names.
+
+### Fixed
+
+- **Missing release tags.** `v0.6.0`, `v0.7.0` and `v0.7.1` were backfilled and
+  pushed, so every version in this changelog resolves to a real release again
+  (`v0.6.0`/`v0.7.0`/`v0.7.1` carry the arm64-only bundle that their source
+  produced; `v0.8.0` and later are universal).
+- **arm64-only release artifacts**, which silently broke the "macOS 13+"
+  promise on Intel Macs.
 
 ## [0.7.1] - 2026-10-19
 
@@ -199,7 +261,8 @@ First public release: the menu bar launcher for the upstream `pi-web` web UI.
 - The build is ad-hoc signed, not notarised, so a downloaded copy needs
   Gatekeeper approval on first launch.
 
-[Unreleased]: https://github.com/bestxia0/pi-web-desktop-macos/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/bestxia0/pi-web-desktop-macos/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.8.0
 [0.7.1]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.7.1
 [0.7.0]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.7.0
 [0.6.0]: https://github.com/bestxia0/pi-web-desktop-macos/releases/tag/v0.6.0

@@ -159,10 +159,32 @@ instance — still visible, still stoppable, just through `pi-web stop --port N`
 aftermath is indistinguishable from an instance the user started in a terminal,
 which is a reasonable default.
 
-**Why there is no dependency.** The whole app is one `swiftc` invocation against
-system frameworks. It has no package manifest to resolve, no lockfile to drift,
-and no supply chain beyond Apple's SDK — which matters for a small tool that
-spawns processes on your behalf.
+**Why there is no dependency.** The app is `swiftc` against system frameworks
+only. It has no package manifest to resolve, no lockfile to drift, and no supply
+chain beyond Apple's SDK — which matters for a small tool that spawns processes
+on your behalf. Keeping it universal does not change that: `build.sh` runs one
+`swiftc` pass per architecture and joins them with `lipo`, both of which ship
+with the Xcode Command Line Tools.
+
+**Why the build is universal.** `build.sh` compiles `arm64` and `x86_64`
+(`PI_WEB_ARCHS` overrides the list) and `lipo`s the slices into one Mach-O.
+The app claims macOS 13+ with no architecture qualifier, and an arm64-only
+bundle simply refuses to launch on an Intel Mac — Rosetta translates `x86_64`
+on Apple silicon, never the other way round. `scripts/verify.sh`, CI and the
+release workflow all fail the build when a slice is missing. Cross-compiling
+`x86_64` on Apple silicon can print a benign `libswiftCompatibilityPacks.a`
+linker warning, because that CLT back-deployment library has no x86_64 slice;
+the Intel side is really executed by the `macos-13` CI runner.
+
+**Why releases are cut from a tag.** `make release` (`scripts/release.sh`)
+refuses a dirty tree or an existing tag, runs `scripts/check-docs.sh` and the
+verification suite, then pushes `v<VERSION>`. GitHub Actions builds the bundle
+from that tag, asserts it is universal, and publishes `PiWeb-<version>.zip`.
+Nothing is uploaded from a developer machine and no build output is committed;
+`VERSION` stays the single source of truth for the version and the release.
+`scripts/check-docs.sh` exists because three separate drifts shipped at least
+once each (a stale version example, README language drift, and unreferenced
+files under `docs/images`), and a human reading a diff is not a reliable gate.
 
 **One window, many tabs.** There is exactly one `NSWindow`
 (`AppWindowController`) for the whole process; inside it, each tab is its own
